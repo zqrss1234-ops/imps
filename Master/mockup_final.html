@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Yalla Master Controller</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;font-family:-apple-system,'Helvetica Neue',sans-serif}
+body{
+  background:#050510;
+  display:flex;justify-content:center;align-items:center;
+  min-height:100vh;padding:20px;flex-direction:column;gap:20px
+}
+
+.rect{
+  width:350px;
+  background:transparent;
+  border-radius:18px;
+  border:2px solid #000;
+  overflow:hidden;
+}
+
+.names{
+  display:flex;flex-wrap:wrap;justify-content:center;
+  padding:14px 10px 8px;gap:4px 10px;
+  border-bottom:1px solid rgba(0,0,0,0.5)
+}
+.n{color:#fff;font-size:10px;font-weight:600}
+
+.nums{
+  display:flex;flex-direction:row;justify-content:center;
+  gap:5px;padding:12px 10px;
+  border-bottom:1.5px solid rgba(0,0,0,0.5);
+  background:transparent
+}
+.nb{
+  width:28px;height:28px;border-radius:7px;
+  background:#000;border:1.5px solid rgba(26,26,26,0.6);
+  color:#fff;font-size:12px;font-weight:bold;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;transition:all .2s;user-select:none
+}
+.nb.on{
+  background:rgba(0,42,10,0.7);border-color:rgba(0,255,68,0.8);
+  color:#0f0
+}
+
+.ctrl{
+  display:flex;flex-direction:row-reverse;
+  padding:10px 10px;gap:5px;align-items:center
+}
+.c{
+  flex:1;padding:9px 2px;border-radius:8px;
+  border:1.5px solid rgba(26,26,26,0.6);
+  background:#000;
+  color:#fff;font-size:11px;font-weight:bold;
+  text-align:center;cursor:pointer;transition:all .2s;
+  user-select:none;min-width:0;white-space:nowrap
+}
+.c.on.on{
+  background:rgba(0,100,0,0.9);border-color:rgba(0,255,0,0.9);
+  color:#fff
+}
+.c.on.off{
+  background:rgba(100,0,0,0.9);border-color:rgba(255,0,0,0.9);
+  color:#fff
+}
+.c.active{background:rgba(26,26,150,0.9);border-color:rgba(50,50,255,0.9)}
+.c.cxxed{background:rgba(100,20,100,0.9);border-color:rgba(200,50,200,0.9)}
+.c.hide{background:#000;border-color:rgba(26,26,26,0.6)}
+
+.circle{
+  display:none;width:48px;height:48px;border-radius:50%;
+  background:rgba(0,0,0,0.85);border:2.5px solid rgba(0,0,0,0.9);
+  color:rgba(255,255,255,0.7);font-size:13px;font-weight:bold;
+  align-items:center;justify-content:center;
+  cursor:pointer;box-shadow:0 4px 24px rgba(0,0,0,.6);
+  margin:0 auto;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)
+}
+@keyframes shake{
+  0%,100%{transform:translateX(0)}
+  25%{transform:translateX(-8px)}
+  75%{transform:translateX(8px)}
+}
+
+.st{text-align:center;padding:4px 0 10px;color:#fff;font-size:9px}
+.st .badge{display:inline-block;padding:0 3px;margin:0 1px;border-radius:3px;font-size:8px}
+.st .badge.green{background:rgba(0,180,0,0.3);color:#0f0}
+.st .badge.purple{background:rgba(180,0,180,0.3);color:#f0f}
+.st .badge.blue{background:rgba(0,0,180,0.3);color:#00f}
+.st .badge.gray{background:rgba(80,80,80,0.3);color:#aaa}
+
+.passcode{
+  position:fixed;top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.85);display:flex;
+  align-items:center;justify-content:center;z-index:9999
+}
+.pbox{
+  width:220px;background:#000;border-radius:16px;border:2px solid rgba(26,26,26,0.8);
+  padding:20px;display:flex;flex-direction:column;align-items:center;gap:12px
+}
+.pt{color:#fff;font-size:14px;font-weight:bold}
+.pf{
+  width:160px;padding:8px;border-radius:8px;border:1px solid rgba(50,50,50,0.8);
+  background:rgba(20,20,20,0.9);color:#fff;font-size:18px;font-weight:bold;
+  text-align:center;outline:none
+}
+.pf::placeholder{color:rgba(255,255,255,0.2)}
+.pb{
+  width:160px;padding:10px;border-radius:8px;
+  background:rgba(20,20,80,0.9);color:#fff;font-size:14px;font-weight:bold;
+  text-align:center;cursor:pointer;user-select:none
+}
+.pb:hover{background:rgba(30,30,120,0.9)}
+</style>
+</head>
+<body>
+
+<div class="passcode" id="passcode">
+  <div class="pbox">
+    <div class="pt">Abdulilah</div>
+    <input class="pf" id="pf" type="password" inputmode="numeric" maxlength="6" placeholder="515">
+    <div class="pb" id="unlockBtn">Unlock</div>
+  </div>
+</div>
+
+<div class="rect" id="rect" style="display:none">
+  <div class="names">
+    <span class="n">Abdulilah</span> <span class="n">Lahlouh</span>
+    <span class="n">Charo</span> <span class="n">Abu Mutab</span>
+    <span class="n">Saeed</span> <span class="n">Al-Kaed</span>
+    <span class="n">Al-Shammarah</span> <span class="n">Al-Habbas</span>
+  </div>
+  <div class="nums" id="nums"></div>
+  <div class="ctrl">
+    <div class="c hide" id="hideC">Hide</div>
+    <div class="c" id="liteC">LiTE</div>
+    <div class="c" id="cxxC">cxx</div>
+    <div class="c" id="msC">ms:10</div>
+    <div class="c on" id="onC">ON</div>
+  </div>
+  <div class="st" id="st">None | ms: 10</div>
+</div>
+
+<div class="circle" id="circle">515</div>
+
+<div class="info">اختر رقم | LiTE لربط الحسابات | cxx قلتش</div>
+
+<script>
+let selectedIdx = -1;
+let msIdx = 2;
+const msV = [50,25,10,5,1];
+let isActive = false;
+let lite=false, cxx=false;
+let slaveCount = 3; let totalEver = 5; let cxxCount = 0; // demo
+
+// Simulate dynamic slave heartbeats (like real YMTapRegistry)
+setInterval(function(){
+  if(lite || cxx){
+    // Random fluctuation to show live updates
+    slaveCount = 2 + Math.floor(Math.random() * 4); // 2-5
+    if(slaveCount > totalEver) totalEver = slaveCount;
+    if(cxx) cxxCount = slaveCount;
+    upd();
+  }
+}, 3000);
+
+function build(){
+  const row = document.getElementById('nums');
+  for(let i=1;i<=10;i++){
+    const b = document.createElement('div');
+    b.className = 'nb';
+    b.textContent = i;
+    b.onclick = function(){
+      if(isActive) return;
+      const idx = parseInt(this.textContent) - 1;
+      document.querySelectorAll('.nb').forEach(el => el.classList.remove('on'));
+      if(selectedIdx === idx){ selectedIdx = -1; document.getElementById('onC').textContent='ON'; document.getElementById('onC').className='c on'; }
+      else { selectedIdx = idx; this.classList.add('on'); }
+      upd();
+    };
+    row.appendChild(b);
+  }
+
+}
+
+document.getElementById('onC').onclick = function(){
+  if(selectedIdx < 0) return;
+  isActive = !isActive;
+  this.textContent = isActive ? 'OFF' : 'ON';
+  this.className = 'c on' + (isActive ? ' off' : '');
+};
+document.getElementById('msC').onclick = function(){
+  msIdx = (msIdx+1)%5;
+  this.textContent = 'ms:'+msV[msIdx];
+  upd();
+};
+document.getElementById('cxxC').onclick = function(){
+  cxx=!cxx; this.classList.toggle('cxxed');
+  upd();
+};
+document.getElementById('liteC').onclick = function(){
+  lite=!lite; this.classList.toggle('active');
+  upd();
+};
+document.getElementById('hideC').onclick = function(){
+  document.getElementById('rect').style.display='none';
+  document.getElementById('circle').style.display='flex';
+};
+document.getElementById('circle').onclick = function(){
+  document.getElementById('rect').style.display='block';
+  this.style.display='none';
+};
+
+// Draggable circle
+(function(){
+  const c = document.getElementById('circle');
+  let dragging = false, startX, startY;
+  let cx = window.innerWidth - 100, cy = window.innerHeight/2 - 25;
+  c.style.position = 'fixed';
+  c.style.left = cx+'px';
+  c.style.top = cy+'px';
+  c.addEventListener('mousedown', function(e){
+    if(e.target !== c && e.target.parentElement !== c) return;
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    cx += e.clientX - startX; cy += e.clientY - startY;
+    startX = e.clientX; startY = e.clientY;
+    c.style.left = cx+'px';
+    c.style.top = cy+'px';
+  });
+  document.addEventListener('mouseup', function(){ dragging = false; });
+})();
+
+function upd(){
+  const s = selectedIdx >= 0 ? 'Slot '+(selectedIdx+1) : 'None';
+  const el = document.getElementById('st');
+  let html = s + ' | ms:' + msV[msIdx];
+  if(lite) html += ' | <span class="badge blue">LiTE✓</span>';
+  if(cxx) html += ' | <span class="badge purple">cxx✓</span>';
+  html += ' | <span class="badge gray">' + slaveCount + '</span>';
+  el.innerHTML = html;
+
+  // LiTE: show connected/total when active, else just "LiTE"
+  const liteBtn = document.getElementById('liteC');
+  const cxxBtn = document.getElementById('cxxC');
+  if(lite) liteBtn.textContent = 'LiTE ' + slaveCount + '/' + totalEver;
+  else liteBtn.textContent = 'LiTE';
+  if(cxx) cxxBtn.textContent = 'cxx ' + cxxCount;
+  else cxxBtn.textContent = 'cxx';
+}
+
+// Draggable rectangle (matches panPanel:)
+(function(){
+  const r = document.getElementById('rect');
+  let dragging = false, startX, startY, origX, origY;
+  r.addEventListener('mousedown', function(e){
+    dragging = true;
+    startX = e.clientX; startY = e.clientY;
+    const rect = r.getBoundingClientRect();
+    origX = rect.left + window.scrollX;
+    origY = rect.top + window.scrollY;
+    r.style.position = 'relative';
+    r.style.left = '0px';
+    r.style.top = '0px';
+    r.style.margin = '0';
+  });
+  document.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    r.style.left = dx+'px';
+    r.style.top = dy+'px';
+  });
+  document.addEventListener('mouseup', function(){ dragging = false; });
+})();
+
+build();upd();
+
+// Passcode unlock
+document.getElementById('unlockBtn').onclick = function(){
+  const code = document.getElementById('pf').value;
+  if(code === '515'){
+    document.getElementById('passcode').style.display = 'none';
+    document.getElementById('rect').style.display = 'block';
+  } else {
+    const box = document.querySelector('.pbox');
+    box.style.animation = 'none';
+    void box.offsetHeight;
+    box.style.animation = 'shake 0.24s ease';
+    document.getElementById('pf').value = '';
+    document.getElementById('pf').focus();
+  }
+};
+document.getElementById('pf').addEventListener('keydown', function(e){
+  if(e.key === 'Enter') document.getElementById('unlockBtn').click();
+});
+</script>
+</body>
+</html>

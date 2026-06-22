@@ -1,0 +1,16 @@
+# Theos build system
+.theos/
+packages/
+obj/
+
+# Build artifacts
+*.deb
+*.dylib
+
+# macOS
+.DS_Store
+
+# IDE
+*.swp
+*.swo
+*~

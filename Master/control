@@ -1,0 +1,9 @@
+Package: com.yalla.mastertweak
+Name: Yalla Master Controller
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Professional controller for Yalla Lite with multi-account management
+Maintainer: Abdulilah
+Author: Abdulilah
+Section: Tweaks
+Depends: firmware (>= 14.0)

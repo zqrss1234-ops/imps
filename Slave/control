@@ -1,0 +1,9 @@
+Package: com.yalla.slavetweak
+Name: Yalla Slave Controller
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Slave instance for Yalla Lite multi-account sync
+Maintainer: Abdulilah
+Author: Abdulilah
+Section: Tweaks
+Depends: firmware (>= 14.0)
