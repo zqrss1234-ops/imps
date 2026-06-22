@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build normal
+        continue-on-error: true
         run: |
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           echo "SDK path: $SDK"
@@ -27,9 +28,10 @@ jobs:
             -dynamiclib \
             -o YallaMaster.dylib \
             -x objective-c++ \
-            Master/Tweak.xm
+            Master/Tweak.xm 2>build_error.txt; rc=$?; echo $rc > build_status.txt; exit $rc
 
       - name: Build DIRECT (no passcode)
+        continue-on-error: true
         run: |
           xcrun -sdk iphoneos clang++ \
             -arch arm64 \
@@ -44,16 +46,34 @@ jobs:
             -DYM_DIRECT \
             -o YallaMaster_DIRECT.dylib \
             -x objective-c++ \
-            Master/Tweak.xm
+            Master/Tweak.xm 2>build_direct_error.txt; rc=$?; echo $rc > build_direct_status.txt; exit $rc
 
-      - name: Sign
+      - name: Upload build logs even if failed
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            build_error.txt
+            build_direct_error.txt
+            build_status.txt
+            build_direct_status.txt
+          if-no-files-found: warn
+
+      - name: Sign normal
+        if: hashFiles('YallaMaster.dylib') != ''
         run: |
           curl -sL -o /tmp/ldid https://github.com/opa334/ldid/releases/download/v2.1.2-procursus5/ldid_macosx_arm64
           chmod +x /tmp/ldid
           /tmp/ldid -Sentitlements.plist YallaMaster.dylib
+
+      - name: Sign DIRECT
+        if: hashFiles('YallaMaster_DIRECT.dylib') != ''
+        run: |
           /tmp/ldid -Sentitlements.plist YallaMaster_DIRECT.dylib
 
       - name: Upload dylibs
+        if: hashFiles('YallaMaster.dylib') != '' || hashFiles('YallaMaster_DIRECT.dylib') != ''
         uses: actions/upload-artifact@v4
         with:
           name: YallaMaster-dylibs
