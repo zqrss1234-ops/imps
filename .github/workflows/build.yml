@@ -1,4 +1,4 @@
-name: Build Master
+name: Build Master + Slave
 
 on:
   push:
@@ -44,6 +44,22 @@ jobs:
             -x objective-c++ \
             Master/Tweak.xm 2>build_direct_error.txt; echo $? > build_direct_status.txt
 
+      - name: Build Slave
+        run: |
+          xcrun -sdk iphoneos clang++ \
+            -arch arm64 \
+            -miphoneos-version-min=14.0 \
+            -fobjc-arc \
+            -fobjc-weak \
+            -framework UIKit \
+            -framework Foundation \
+            -framework CoreGraphics \
+            -framework QuartzCore \
+            -dynamiclib \
+            -o YallaSlave.dylib \
+            -x objective-c++ \
+            Slave/Tweak.xm 2>build_slave_error.txt; echo $? > build_slave_status.txt
+
       - name: Upload build logs even if failed
         if: always()
         uses: actions/upload-artifact@v4
@@ -54,6 +70,8 @@ jobs:
             build_direct_error.txt
             build_status.txt
             build_direct_status.txt
+            build_slave_error.txt
+            build_slave_status.txt
           if-no-files-found: warn
 
       - name: Sign and stage dylibs
@@ -61,20 +79,33 @@ jobs:
         run: |
           curl -sL -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_arm64
           chmod +x /tmp/ldid
-          mkdir -p output
+          mkdir -p output_master output_slave
           for f in YallaMaster.dylib YallaMaster_DIRECT.dylib; do
             if [ -f "$f" ]; then
               /tmp/ldid -Sentitlements.plist "$f" || echo "Signing $f failed, uploading unsigned"
-              cp "$f" output/
+              cp "$f" output_master/
             fi
           done
+          if [ -f "YallaSlave.dylib" ]; then
+            /tmp/ldid -Sentitlements.plist "YallaSlave.dylib" || echo "Signing YallaSlave.dylib failed, uploading unsigned"
+            cp "YallaSlave.dylib" output_slave/
+            cp Slave/YallaSlave.plist output_slave/
+          fi
 
-      - name: Upload dylibs
+      - name: Upload Master dylibs
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: YallaMaster-dylibs
-          path: output/
+          path: output_master/
+          if-no-files-found: warn
+
+      - name: Upload Slave dylibs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: YallaSlave-dylibs
+          path: output_slave/
           if-no-files-found: warn
 
 
