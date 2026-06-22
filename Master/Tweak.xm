@@ -4,27 +4,33 @@
 
 #define kYallaBundle @"com.yalla.yallalite"
 
-static int kMsVals[] = {50, 25, 10, 5, 1};
+static const int kMsVals[] = {50, 25, 10, 5, 1};
 static int s_sel = -1;
-static int s_msIdx = 2;
+static int s_msIdx = 0;
 static BOOL s_on = NO;
 static BOOL s_cxx = NO;
 static BOOL s_lite = NO;
 static UIView *s_panel;
 static UIView *s_passView;
 static UITextField *s_passField;
-static UILabel *s_st, *s_msL, *s_cxxL, *s_liteL;
+static UILabel *s_st, *s_msL, *s_cxxL, *s_liteL, *s_selL;
 static NSMutableArray *s_nums;
 static BOOL s_visible = YES;
 
-static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t) {
+static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, CGFloat fs) {
     UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
     lb.text = t;
     lb.textColor = [UIColor whiteColor];
-    lb.font = [UIFont boldSystemFontOfSize:11];
+    lb.font = [UIFont boldSystemFontOfSize:fs];
     lb.textAlignment = NSTextAlignmentCenter;
     lb.userInteractionEnabled = NO;
     return lb;
+}
+static UIView *sep(CGFloat x, CGFloat y, CGFloat w) {
+    UIView *v = [[UIView alloc] initWithFrame:CGRectMake(x, y, w, 1)];
+    v.backgroundColor = [UIColor colorWithWhite:0.3 alpha:0.6];
+    v.userInteractionEnabled = NO;
+    return v;
 }
 
 @interface _YM : NSObject @end
@@ -34,11 +40,13 @@ static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *
     int idx = (int)b.tag;
     s_sel = idx;
     for (UIButton *nb in s_nums) nb.selected = (nb.tag == idx);
+    s_selL.text = [NSString stringWithFormat:@"Slot %d selected", idx];
     NSString *cmd = [NSString stringWithFormat:@"com.yalla.liteagent.cmd.select.%d", idx];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
 }
 + (void)onT {
     s_on = !s_on;
+    s_st.text = s_on ? @"ON" : @"OFF";
     for (long i = 1; i <= 10; i++) {
         NSString *cmd = s_on
             ? [NSString stringWithFormat:@"com.yalla.liteagent.cmd.micon.%ld", i]
@@ -78,6 +86,7 @@ static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *
         return;
     }
     [s_passField resignFirstResponder];
+    s_passField = nil;
     [s_passView removeFromSuperview];
     s_passView = nil;
     [self buildUI];
@@ -88,96 +97,133 @@ static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *
     UIView *cv = kw.rootViewController.view;
     if (!cv) return;
 
-    s_panel = [[UIView alloc] initWithFrame:CGRectMake(20, 140, 320, 200)];
-    s_panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
+    s_panel = [[UIView alloc] initWithFrame:CGRectMake(16, 130, 348, 188)];
+    s_panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.94];
     s_panel.layer.cornerRadius = 18;
     s_panel.layer.borderWidth = 2;
     s_panel.layer.borderColor = [UIColor blackColor].CGColor;
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 120, 18)];
+    // Title
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(14, 8, 140, 20)];
     title.text = @"YallaMaster";
     title.textColor = [UIColor whiteColor];
-    title.font = [UIFont boldSystemFontOfSize:13];
+    title.font = [UIFont boldSystemFontOfSize:15];
     [s_panel addSubview:title];
 
-    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(130, 8, 180, 18)];
-    sub.textColor = [UIColor lightGrayColor];
-    sub.font = [UIFont systemFontOfSize:10];
-    sub.textAlignment = NSTextAlignmentRight;
-    [s_panel addSubview:sub];
+    s_st = [[UILabel alloc] initWithFrame:CGRectMake(160, 8, 178, 20)];
+    s_st.textColor = [UIColor colorWithRed:0.4 green:0.8 blue:0.4 alpha:1];
+    s_st.font = [UIFont systemFontOfSize:12];
+    s_st.textAlignment = NSTextAlignmentRight;
+    s_st.text = @"Ready";
+    [s_panel addSubview:s_st];
 
+    [s_panel addSubview:sep(10, 30, 328)];
+
+    // Slots label
+    UILabel *sl = [[UILabel alloc] initWithFrame:CGRectMake(14, 33, 100, 16)];
+    sl.text = @"Slots";
+    sl.textColor = [UIColor colorWithWhite:0.7 alpha:1];
+    sl.font = [UIFont systemFontOfSize:10];
+    [s_panel addSubview:sl];
+
+    // Number buttons 1-10 (2 rows, 5 cols)
     s_nums = [NSMutableArray array];
     for (int i = 1; i <= 10; i++) {
         int col = (i - 1) % 5;
         int row = (i - 1) / 5;
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        b.frame = CGRectMake(10 + col * 60, 30 + row * 30, 50, 24);
+        b.frame = CGRectMake(14 + col * 64, 52 + row * 30, 56, 24);
         [b setTitle:[@(i) stringValue] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor blackColor] forState:UIControlStateSelected];
         b.backgroundColor = [UIColor darkGrayColor];
         b.layer.cornerRadius = 6;
-        b.layer.borderWidth = 1;
+        b.layer.borderWidth = 1.5;
         b.layer.borderColor = [UIColor grayColor].CGColor;
-        b.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+        b.titleLabel.font = [UIFont boldSystemFontOfSize:13];
         b.tag = i;
         [b addTarget:self action:@selector(num:) forControlEvents:UIControlEventTouchUpInside];
         [s_panel addSubview:b];
         [s_nums addObject:b];
     }
 
-    int y = 94;
-    int w = 52;
+    [s_panel addSubview:sep(10, 112, 328)];
+
+    // Controls label
+    UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(14, 114, 100, 16)];
+    cl.text = @"Controls";
+    cl.textColor = [UIColor colorWithWhite:0.7 alpha:1];
+    cl.font = [UIFont systemFontOfSize:10];
+    [s_panel addSubview:cl];
+
+    int yb = 132;
+    int bw = 58;
+
     UIButton *onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    onBtn.frame = CGRectMake(10, y, w, 28);
+    onBtn.frame = CGRectMake(14, yb, bw, 28);
     [onBtn setTitle:@"ON" forState:UIControlStateNormal];
     [onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     onBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.2 alpha:1];
     onBtn.layer.cornerRadius = 8;
+    onBtn.layer.borderWidth = 1;
+    onBtn.layer.borderColor = [UIColor colorWithRed:0.3 green:0.7 blue:0.3 alpha:0.8].CGColor;
     [onBtn addTarget:self action:@selector(onT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:onBtn];
 
-    s_msL = makeLabel(72, y, w, 28, @"10ms");
+    s_msL = mkLab(80, yb, bw, 28, @"50ms", 12);
+    s_msL.layer.borderWidth = 1;
+    s_msL.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
+    s_msL.layer.cornerRadius = 8;
     s_msL.tag = 101;
     [s_panel addSubview:s_msL];
     UIButton *msBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    msBtn.frame = CGRectMake(72, y, w, 28);
+    msBtn.frame = CGRectMake(80, yb, bw, 28);
     msBtn.backgroundColor = [UIColor clearColor];
     [msBtn addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:msBtn];
 
-    s_cxxL = makeLabel(134, y, w, 28, @"cxx");
+    s_cxxL = mkLab(146, yb, bw, 28, @"cxx", 12);
+    s_cxxL.layer.borderWidth = 1;
+    s_cxxL.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
+    s_cxxL.layer.cornerRadius = 8;
     s_cxxL.tag = 102;
     [s_panel addSubview:s_cxxL];
     UIButton *cxxBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    cxxBtn.frame = CGRectMake(134, y, w, 28);
+    cxxBtn.frame = CGRectMake(146, yb, bw, 28);
     cxxBtn.backgroundColor = [UIColor clearColor];
     [cxxBtn addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:cxxBtn];
 
-    s_liteL = makeLabel(196, y, w, 28, @"LiTE");
+    s_liteL = mkLab(212, yb, bw, 28, @"LiTE", 12);
+    s_liteL.layer.borderWidth = 1;
+    s_liteL.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
+    s_liteL.layer.cornerRadius = 8;
     s_liteL.tag = 103;
     [s_panel addSubview:s_liteL];
     UIButton *liteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    liteBtn.frame = CGRectMake(196, y, w, 28);
+    liteBtn.frame = CGRectMake(212, yb, bw, 28);
     liteBtn.backgroundColor = [UIColor clearColor];
     [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:liteBtn];
 
     UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    hideBtn.frame = CGRectMake(258, y, w, 28);
+    hideBtn.frame = CGRectMake(278, yb, bw, 28);
     [hideBtn setTitle:@"Hide" forState:UIControlStateNormal];
     [hideBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     hideBtn.backgroundColor = [UIColor darkGrayColor];
     hideBtn.layer.cornerRadius = 8;
+    hideBtn.layer.borderWidth = 1;
+    hideBtn.layer.borderColor = [UIColor lightGrayColor].CGColor;
     [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:hideBtn];
 
-    s_st = [[UILabel alloc] initWithFrame:CGRectMake(10, 130, 300, 18)];
-    s_st.textColor = [UIColor lightGrayColor];
-    s_st.font = [UIFont systemFontOfSize:9];
-    s_st.textAlignment = NSTextAlignmentRight;
-    [s_panel addSubview:s_st];
+    // Selected slot indicator
+    s_selL = [[UILabel alloc] initWithFrame:CGRectMake(14, 166, 324, 16)];
+    s_selL.textColor = [UIColor colorWithWhite:0.6 alpha:1];
+    s_selL.font = [UIFont systemFontOfSize:10];
+    s_selL.textAlignment = NSTextAlignmentCenter;
+    s_selL.text = @"No slot selected";
+    [s_panel addSubview:s_selL];
 
     [cv addSubview:s_panel];
 }
@@ -188,24 +234,31 @@ static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *
     if (!cv) return;
 
     s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, [UIScreen mainScreen].bounds.size.height)];
-    s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+    s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.88];
     s_passView.userInteractionEnabled = YES;
 
-    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 130)];
+    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 140)];
     box.center = CGPointMake(s_passView.center.x, s_passView.center.y - 60);
     box.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.95];
-    box.layer.cornerRadius = 16;
+    box.layer.cornerRadius = 18;
     box.layer.borderWidth = 2;
     box.layer.borderColor = [UIColor blackColor].CGColor;
 
-    UILabel *pl = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 200, 20)];
-    pl.text = @"Enter Passcode";
+    UILabel *pl = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, 220, 20)];
+    pl.text = @"YallaMaster Passcode";
     pl.textColor = [UIColor whiteColor];
     pl.font = [UIFont boldSystemFontOfSize:14];
     pl.textAlignment = NSTextAlignmentCenter;
     [box addSubview:pl];
 
-    s_passField = [[UITextField alloc] initWithFrame:CGRectMake(30, 44, 140, 30)];
+    UILabel *inst = [[UILabel alloc] initWithFrame:CGRectMake(0, 40, 220, 16)];
+    inst.text = @"Enter code to continue";
+    inst.textColor = [UIColor colorWithWhite:0.6 alpha:1];
+    inst.font = [UIFont systemFontOfSize:11];
+    inst.textAlignment = NSTextAlignmentCenter;
+    [box addSubview:inst];
+
+    s_passField = [[UITextField alloc] initWithFrame:CGRectMake(40, 62, 140, 30)];
     s_passField.placeholder = @"***";
     s_passField.textAlignment = NSTextAlignmentCenter;
     s_passField.keyboardType = UIKeyboardTypeNumberPad;
@@ -213,14 +266,16 @@ static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *
     s_passField.textColor = [UIColor whiteColor];
     s_passField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
     s_passField.layer.cornerRadius = 8;
+    s_passField.layer.borderWidth = 1;
+    s_passField.layer.borderColor = [UIColor colorWithWhite:0.4 alpha:1].CGColor;
     [box addSubview:s_passField];
 
     UIButton *psBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    psBtn.frame = CGRectMake(40, 84, 120, 28);
+    psBtn.frame = CGRectMake(50, 100, 120, 28);
     [psBtn setTitle:@"Submit" forState:UIControlStateNormal];
     [psBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     psBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.7 alpha:1];
-    psBtn.layer.cornerRadius = 8;
+    psBtn.layer.cornerRadius = 10;
     [psBtn addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
     [box addSubview:psBtn];
 
