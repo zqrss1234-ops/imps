@@ -536,7 +536,7 @@ static BOOL glitchBlock = NO;
 
 #pragma mark - UI
 
-@interface YMUI : UIView
+@interface YMUI : NSObject
 @property (nonatomic, strong) UIView *rect;
 @property (nonatomic, strong) UIView *circle;
 @property (nonatomic, strong) UIView *passcodeView;
@@ -544,6 +544,7 @@ static BOOL glitchBlock = NO;
 @property (nonatomic, strong) UIButton *onBtn, *msBtn, *cxxBtn, *liteBtn, *hideBtn;
 @property (nonatomic, strong) UILabel *st;
 @property (nonatomic, strong) YMNotify *notify;
+@property (nonatomic, strong) NSTimer *updTimer;
 - (void)build;
 - (void)showPasscode;
 @end
@@ -552,7 +553,6 @@ static BOOL glitchBlock = NO;
 - (instancetype)init {
     if ((self = [super init])) {
         self.btns = [NSMutableArray array];
-        self.userInteractionEnabled = YES;
         self.notify = [[YMNotify alloc] init];
         [self showPasscode];
     }
@@ -621,16 +621,7 @@ static BOOL glitchBlock = NO;
         }
     }
     NSString *code = tf.text ?: @"";
-    if ([code isEqualToString:@"515"]) {
-        [self.passcodeView removeFromSuperview];
-        self.passcodeView = nil;
-        [self build];
-        __weak __typeof__(self) ws = self;
-        [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
-            [ws upd];
-        }];
-    } else {
-        // Shake animation
+    if (![code isEqualToString:@"515"]) {
         CABasicAnimation *shake = [CABasicAnimation animationWithKeyPath:@"position"];
         shake.duration = 0.06;
         shake.repeatCount = 3;
@@ -639,7 +630,20 @@ static BOOL glitchBlock = NO;
         shake.toValue = [NSValue valueWithCGPoint:CGPointMake(box.center.x + 8, box.center.y)];
         [box.layer addAnimation:shake forKey:@"shake"];
         tf.text = @"";
+        return;
     }
+
+    [tf resignFirstResponder];
+    [self.passcodeView removeFromSuperview];
+    self.passcodeView = nil;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self build];
+        [self.updTimer invalidate];
+        self.updTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
+            [self upd];
+        }];
+    });
 }
 
 - (void)build {
@@ -772,8 +776,11 @@ static BOOL glitchBlock = NO;
     [kw addSubview:self.rect];
     [kw bringSubviewToFront:self.rect];
 
-    // Draggable panel (from reference dylib: panPanel:)
+    // Draggable panel - must not block button taps
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    pan.cancelsTouchesInView = NO;
+    pan.delaysTouchesBegan = NO;
+    pan.delaysTouchesEnded = NO;
     [self.rect addGestureRecognizer:pan];
 
     // Circle hidden
@@ -793,6 +800,9 @@ static BOOL glitchBlock = NO;
     UITapGestureRecognizer *ct = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showRect)];
     [self.circle addGestureRecognizer:ct];
     UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    cp.cancelsTouchesInView = NO;
+    cp.delaysTouchesBegan = NO;
+    cp.delaysTouchesEnded = NO;
     [self.circle addGestureRecognizer:cp];
     [kw addSubview:self.circle];
 }
@@ -899,13 +909,16 @@ static BOOL glitchBlock = NO;
 }
 
 - (void)panPanel:(UIPanGestureRecognizer *)g {
-    static CGPoint startCenter;
     UIView *v = g.view;
     if (g.state == UIGestureRecognizerStateBegan) {
-        startCenter = v.center;
+        objc_setAssociatedObject(g, @selector(panPanel:), [NSValue valueWithCGPoint:v.center], OBJC_ASSOCIATION_RETAIN);
     } else if (g.state == UIGestureRecognizerStateChanged) {
-        CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(startCenter.x + t.x, startCenter.y + t.y);
+        NSValue *val = objc_getAssociatedObject(g, @selector(panPanel:));
+        if (val) {
+            CGPoint start = [val CGPointValue];
+            CGPoint t = [g translationInView:v.superview];
+            v.center = CGPointMake(start.x + t.x, start.y + t.y);
+        }
     }
 }
 

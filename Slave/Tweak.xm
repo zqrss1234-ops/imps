@@ -104,13 +104,14 @@ static void ys_restoreCxxOnMicFace(void);
 
 #pragma mark - YSUI
 
-@interface YSUI : UIView
+@interface YSUI : NSObject
 @property (nonatomic, strong) UIView *rect;
 @property (nonatomic, strong) UIView *circle;
 @property (nonatomic, strong) UIView *passcodeView;
 @property (nonatomic, strong) NSMutableArray *btns;
 @property (nonatomic, strong) UIButton *onBtn, *msBtn, *cxxBtn, *liteBtn, *hideBtn;
 @property (nonatomic, strong) UILabel *st;
+@property (nonatomic, strong) NSTimer *updTimer;
 - (void)build;
 - (void)showPasscode;
 - (void)doOn;
@@ -125,7 +126,6 @@ static void ys_restoreCxxOnMicFace(void);
 - (instancetype)init {
     if ((self = [super init])) {
         self.btns = [NSMutableArray array];
-        self.userInteractionEnabled = YES;
         [self showPasscode];
     }
     return self;
@@ -184,14 +184,7 @@ static void ys_restoreCxxOnMicFace(void);
         if ([v isKindOfClass:[UITextField class]]) { tf = (UITextField *)v; break; }
     }
     NSString *code = tf.text ?: @"";
-    if ([code isEqualToString:@"515"]) {
-        [self.passcodeView removeFromSuperview];
-        self.passcodeView = nil;
-        [self build];
-        [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
-            if (gSlaveUI) [gSlaveUI upd];
-        }];
-    } else {
+    if (![code isEqualToString:@"515"]) {
         CABasicAnimation *shake = [CABasicAnimation animationWithKeyPath:@"position"];
         shake.duration = 0.06;
         shake.repeatCount = 3;
@@ -200,7 +193,20 @@ static void ys_restoreCxxOnMicFace(void);
         shake.toValue = [NSValue valueWithCGPoint:CGPointMake(box.center.x + 8, box.center.y)];
         [box.layer addAnimation:shake forKey:@"shake"];
         tf.text = @"";
+        return;
     }
+
+    [tf resignFirstResponder];
+    [self.passcodeView removeFromSuperview];
+    self.passcodeView = nil;
+
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [self build];
+        [self.updTimer invalidate];
+        self.updTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
+            [self upd];
+        }];
+    });
 }
 
 - (void)build {
@@ -301,8 +307,11 @@ static void ys_restoreCxxOnMicFace(void);
     [self.rect addSubview:self.st];
     [kw addSubview:self.rect];
     [kw bringSubviewToFront:self.rect];
-    // Drag
+    // Drag - must not block button taps
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    pan.cancelsTouchesInView = NO;
+    pan.delaysTouchesBegan = NO;
+    pan.delaysTouchesEnded = NO;
     [self.rect addGestureRecognizer:pan];
     // Circle
     self.circle = [[UIView alloc] initWithFrame:CGRectMake(kw.bounds.size.width - 80, kw.bounds.size.height/2 - 25, 48, 48)];
@@ -321,6 +330,9 @@ static void ys_restoreCxxOnMicFace(void);
     UITapGestureRecognizer *ct = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showRect)];
     [self.circle addGestureRecognizer:ct];
     UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    cp.cancelsTouchesInView = NO;
+    cp.delaysTouchesBegan = NO;
+    cp.delaysTouchesEnded = NO;
     [self.circle addGestureRecognizer:cp];
     [kw addSubview:self.circle];
 }
@@ -449,13 +461,16 @@ static void ys_restoreCxxOnMicFace(void);
 }
 
 - (void)panPanel:(UIPanGestureRecognizer *)g {
-    static CGPoint startCenter;
     UIView *v = g.view;
     if (g.state == UIGestureRecognizerStateBegan) {
-        startCenter = v.center;
+        objc_setAssociatedObject(g, @selector(panPanel:), [NSValue valueWithCGPoint:v.center], OBJC_ASSOCIATION_RETAIN);
     } else if (g.state == UIGestureRecognizerStateChanged) {
-        CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(startCenter.x + t.x, startCenter.y + t.y);
+        NSValue *val = objc_getAssociatedObject(g, @selector(panPanel:));
+        if (val) {
+            CGPoint start = [val CGPointValue];
+            CGPoint t = [g translationInView:v.superview];
+            v.center = CGPointMake(start.x + t.x, start.y + t.y);
+        }
     }
 }
 
