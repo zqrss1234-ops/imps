@@ -23,7 +23,7 @@ jobs:
             -framework CoreGraphics \
             -framework QuartzCore \
             -dynamiclib \
-            -o YallaMaster.dylib \
+            -o YallaAgentMaster.dylib \
             -x objective-c++ \
             Master/Tweak.xm 2>build_error.txt; echo $? > build_status.txt
 
@@ -40,7 +40,7 @@ jobs:
             -framework QuartzCore \
             -dynamiclib \
             -DYM_DIRECT \
-            -o YallaMaster_DIRECT.dylib \
+            -o YallaAgentMaster_DIRECT.dylib \
             -x objective-c++ \
             Master/Tweak.xm 2>build_direct_error.txt; echo $? > build_direct_status.txt
 
@@ -56,7 +56,7 @@ jobs:
             -framework CoreGraphics \
             -framework QuartzCore \
             -dynamiclib \
-            -o YallaSlave.dylib \
+            -o YallaAgentSlave.dylib \
             -x objective-c++ \
             Slave/Tweak.xm 2>build_slave_error.txt; echo $? > build_slave_status.txt
 
@@ -80,15 +80,15 @@ jobs:
           curl -sL -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_arm64
           chmod +x /tmp/ldid
           mkdir -p output_master output_slave
-          for f in YallaMaster.dylib YallaMaster_DIRECT.dylib; do
+          for f in YallaAgentMaster.dylib YallaAgentMaster_DIRECT.dylib; do
             if [ -f "$f" ]; then
               /tmp/ldid -Sentitlements.plist "$f" || echo "Signing $f failed, uploading unsigned"
               cp "$f" output_master/
             fi
           done
-          if [ -f "YallaSlave.dylib" ]; then
-            /tmp/ldid -Sentitlements.plist "YallaSlave.dylib" || echo "Signing YallaSlave.dylib failed, uploading unsigned"
-            cp "YallaSlave.dylib" output_slave/
+          if [ -f "YallaAgentSlave.dylib" ]; then
+            /tmp/ldid -Sentitlements.plist "YallaAgentSlave.dylib" || echo "Signing YallaAgentSlave.dylib failed, uploading unsigned"
+            cp "YallaAgentSlave.dylib" output_slave/
             cp Slave/YallaSlave.plist output_slave/
           fi
 

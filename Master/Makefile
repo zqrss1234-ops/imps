@@ -6,10 +6,10 @@ INSTALL_TARGET_PROCESSES = YallaLite
 
 include $(THEOS)/makefiles/common.mk
 
-TWEAK_NAME = YallaMaster
+TWEAK_NAME = YallaAgentMaster
 
-YallaMaster_FILES = Tweak.xm
-YallaMaster_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -fno-logos
-YallaMaster_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
+YallaAgentMaster_FILES = Tweak.xm
+YallaAgentMaster_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -fno-logos
+YallaAgentMaster_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 
 include $(THEOS_MAKE_PATH)/tweak.mk
