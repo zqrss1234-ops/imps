@@ -602,7 +602,6 @@ static BOOL glitchBlock = NO;
     unlock.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
     unlock.layer.cornerRadius = 8;
     unlock.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    __weak __typeof__(self) ws = self;
     [unlock addTarget:self action:@selector(passcodeSubmit:) forControlEvents:UIControlEventTouchUpInside];
     [box addSubview:unlock];
 
@@ -626,8 +625,9 @@ static BOOL glitchBlock = NO;
         [self.passcodeView removeFromSuperview];
         self.passcodeView = nil;
         [self build];
+        __weak __typeof__(self) ws = self;
         [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
-            [self upd];
+            [ws upd];
         }];
     } else {
         // Shake animation
@@ -652,7 +652,7 @@ static BOOL glitchBlock = NO;
     self.rect = [[UIView alloc] initWithFrame:CGRectMake((kw.bounds.size.width - rw)/2,
                                                          (kw.bounds.size.height - rh)/2 - 60,
                                                          rw, rh)];
-    self.rect.backgroundColor = [UIColor clearColor];
+    self.rect.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
     self.rect.layer.cornerRadius = 18;
     self.rect.layer.borderWidth = 2;
     self.rect.layer.borderColor = [UIColor blackColor].CGColor;
@@ -664,7 +664,7 @@ static BOOL glitchBlock = NO;
         int col = i % 4, row = i / 4;
         UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(10 + col * ((rw-40)/4 + 5), 6 + row * 16, (rw-40)/4, 14)];
         l.text = kNameList[i];
-        l.textColor = [UIColor whiteColor];
+        l.textColor = [UIColor colorWithWhite:0.9 alpha:1];
         l.font = [UIFont boldSystemFontOfSize:9];
         l.adjustsFontSizeToFitWidth = YES;
         l.minimumScaleFactor = 0.6;

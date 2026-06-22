@@ -208,7 +208,7 @@ static void ys_restoreCxxOnMicFace(void);
     if (!kw) return;
     CGFloat rw = MIN(kw.bounds.size.width - 20, 350);
     self.rect = [[UIView alloc] initWithFrame:CGRectMake((kw.bounds.size.width - rw)/2, (kw.bounds.size.height - 142)/2 - 40, rw, 142)];
-    self.rect.backgroundColor = [UIColor clearColor];
+    self.rect.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
     self.rect.layer.cornerRadius = 18;
     self.rect.layer.borderWidth = 2;
     self.rect.layer.borderColor = [UIColor blackColor].CGColor;
@@ -219,7 +219,7 @@ static void ys_restoreCxxOnMicFace(void);
         int col = i % 4, row = i / 4;
         UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(10 + col * ((rw-40)/4 + 5), 6 + row * 16, (rw-40)/4, 14)];
         l.text = kNameList[i];
-        l.textColor = [UIColor whiteColor];
+        l.textColor = [UIColor colorWithWhite:0.9 alpha:1];
         l.font = [UIFont boldSystemFontOfSize:9];
         l.adjustsFontSizeToFitWidth = YES;
         l.minimumScaleFactor = 0.6;
@@ -556,8 +556,9 @@ static void onNotification(CFNotificationCenterRef center, void *observer,
         NULL, NULL,
         CFNotificationSuspensionBehaviorDeliverImmediately);
     [self postTap];
+    __weak __typeof__(self) ws = self;
     self.tapTimer = [NSTimer scheduledTimerWithTimeInterval:3.0 repeats:YES block:^(NSTimer *t) {
-        [self postTap];
+        [ws postTap];
     }];
 }
 
