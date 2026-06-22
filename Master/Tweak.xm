@@ -3,6 +3,7 @@
 #import <objc/runtime.h>
 
 #define kYallaBundle @"com.yalla.yallalite"
+#define kNotifyPrefix @"com.yalla.liteagent.cmd."
 
 static const int kMsVals[] = {50, 25, 10, 5, 1};
 static NSString *const kNames[] = {
@@ -30,6 +31,18 @@ static UIView *s_circle;
 
 static BOOL s_visible = YES;
 
+static void postCmd(NSString *cmd) {
+    NSString *name = [kNotifyPrefix stringByAppendingString:cmd];
+    NSLog(@"postCommand %@", name);
+    CFNotificationCenterPostNotification(
+        CFNotificationCenterGetDarwinNotifyCenter(),
+        (__bridge CFStringRef)name, NULL, NULL, YES);
+}
+
+static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
+    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
+}
+
 static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, CGFloat fs) {
     UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
     lb.text = t;
@@ -39,25 +52,24 @@ static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, C
     lb.userInteractionEnabled = NO;
     return lb;
 }
+
 static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     UIView *v = [[UIView alloc] initWithFrame:CGRectMake(x, y, w, 1)];
     v.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
     v.userInteractionEnabled = NO;
     return v;
 }
-static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
-    return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
-}
 
 @interface _YM : NSObject @end
 @implementation _YM
 
 + (void)upd {
-    NSString *s = s_sel >= 0 ? [NSString stringWithFormat:@"Slot %d", s_sel + 1] : @"None";
-    NSMutableString *html = [NSMutableString stringWithFormat:@"%@ | ms:%d", s, kMsVals[s_msIdx]];
-    if (s_lite) [html appendFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver];
-    if (s_cxx) [html appendFormat:@" | cxx✓ %d", s_cxxCount];
-    s_st.text = html;
+    NSString *s = s_sel >= 0 ? kNames[s_sel] : @"None";
+    NSString *status = s_on ? @"ON" : @"OFF";
+    NSString *liteSuf = s_lite ? [NSString stringWithFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver] : @"";
+    NSString *cxxSuf = s_cxx ? [NSString stringWithFormat:@" | cxx✓ %d", s_cxxCount] : @"";
+    s_st.text = [NSString stringWithFormat:@"%@ | %@ | Mic %d | %dms%@%@",
+        s, status, s_sel + 1, kMsVals[s_msIdx], liteSuf, cxxSuf];
 
     if (s_lite) s_liteL.text = [NSString stringWithFormat:@"LiTE %d/%d", s_slaveCount, s_totalEver];
     else s_liteL.text = @"LiTE";
@@ -71,8 +83,6 @@ static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     s_sel = idx;
     for (UIButton *nb in s_nums) nb.selected = (nb.tag == idx);
     [self upd];
-    NSString *cmd = [NSString stringWithFormat:@"com.yalla.liteagent.cmd.select.%d", idx];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
 }
 
 + (void)onT {
@@ -81,19 +91,15 @@ static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    for (long i = 1; i <= 10; i++) {
-        NSString *cmd = s_on
-            ? [NSString stringWithFormat:@"com.yalla.liteagent.cmd.micon.%ld", i]
-            : [NSString stringWithFormat:@"com.yalla.liteagent.cmd.micoff.%ld", i];
-        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
-    }
+    postCmd(s_on ? @"run.on" : @"run.off");
+    [self upd];
 }
 
 + (void)msT {
     s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
     s_msL.text = [NSString stringWithFormat:@"ms:%d", kMsVals[s_msIdx]];
-    NSString *cmd = [NSString stringWithFormat:@"com.yalla.liteagent.cmd.ms.%d", kMsVals[s_msIdx]];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
+    postCmd([NSString stringWithFormat:@"speed.%d", kMsVals[s_msIdx]]);
+    postCmd(@"P.M.S");
     [self upd];
 }
 
@@ -103,7 +109,7 @@ static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     s_cxxL.backgroundColor = s_cxx ? clr(100,20,100,0.9) : [UIColor clearColor];
     s_cxxL.layer.borderColor = s_cxx ? clr(200,50,200,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_cxx) s_cxxCount = s_slaveCount;
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.yalla.liteagent.cmd.cxx"), NULL, NULL, YES);
+    postCmd(s_cxx ? @"cxx.face" : @"cxx.safe");
     [self upd];
 }
 
@@ -112,7 +118,7 @@ static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     s_liteL.textColor = s_lite ? clr(50,50,255,1) : [UIColor whiteColor];
     s_liteL.backgroundColor = s_lite ? clr(26,26,150,0.9) : [UIColor clearColor];
     s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.yalla.liteagent.cmd.lite"), NULL, NULL, YES);
+    postCmd(s_lite ? @"lite.on" : @"lite.off");
     [self upd];
 }
 
@@ -196,7 +202,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
 
     [s_panel addSubview:mkSep(0, 32, PW)];
 
-    // Numbers 1-10 (dynamically spaced)
+    // Numbers 1-10
     CGFloat numStartX = 12;
     CGFloat numTotalW = PW - 24;
     CGFloat numSpacing = numTotalW / 9;
@@ -295,7 +301,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_st.textColor = [UIColor whiteColor];
     s_st.font = [UIFont systemFontOfSize:10];
     s_st.textAlignment = NSTextAlignmentCenter;
-    s_st.text = @"None | ms:50";
+    s_st.text = @"None | OFF | Mic 0 | 50ms";
     [s_panel addSubview:s_st];
 
     // Info text
@@ -312,7 +318,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
 
     [cv addSubview:s_panel];
 
-    // Circle for hidden state
+    // Circle
     CGFloat cs = 48;
     CGFloat cx2 = sw - cs - 20;
     CGFloat cy2 = [UIScreen mainScreen].bounds.size.height / 2 - cs / 2;
@@ -395,7 +401,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     box.layer.borderColor = clr(26,26,26,0.8).CGColor;
 
     UILabel *pt = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, 220, 20)];
-    pt.text = @"YallaMaster";
+    pt.text = @"YallaAgentMaster";
     pt.textColor = [UIColor whiteColor];
     pt.font = [UIFont boldSystemFontOfSize:15];
     pt.textAlignment = NSTextAlignmentCenter;
