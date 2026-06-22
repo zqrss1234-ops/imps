@@ -1,26 +1,10 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
-#import <QuartzCore/QuartzCore.h>
 
 #define YM_TRY(op) @try { op; } @catch (NSException *e) { NSLog(@"[YallaMaster] %@", e); }
 
-static UIWindow *ym_keyWindow(void) {
-    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
-    if (kw) return kw;
-    if (@available(iOS 13, *)) {
-        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-            if ([s isKindOfClass:[UIWindowScene class]]) {
-                for (UIWindow *w in [(UIWindowScene *)s windows]) {
-                    if (w.isKeyWindow) return w;
-                }
-            }
-        }
-    }
-    return nil;
-}
-
-static NSString *const kYalla = @"com.yalla.yallalite";
+#define kYallaBundle @"com.yalla.yallalite"
 
 static int const kMsVals[5] = {50, 25, 10, 5, 1};
 static NSString *const kNameList[8] = {
@@ -114,6 +98,22 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
 - (void)postRun:(BOOL)o { [self post:o ? @"run.on" : @"run.off"]; }
 @end
 
+static UIView *ym_container(void) {
+    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
+    if (!kw && @available(iOS 13, *)) {
+        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+            if (![s isKindOfClass:[UIWindowScene class]]) continue;
+            for (UIWindow *w in [(UIWindowScene *)s windows]) {
+                if (w.isKeyWindow) { kw = w; break; }
+            }
+            if (kw) break;
+        }
+    }
+    UIViewController *vc = kw.rootViewController;
+    while (vc.presentedViewController) vc = vc.presentedViewController;
+    return vc.view;
+}
+
 @interface YallaUI : NSObject
 @property (nonatomic, strong) UIView *panel;
 @property (nonatomic, strong) UIView *dot;
@@ -125,7 +125,6 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
 @end
 
 @implementation YallaUI {
-    NSTimer *_t;
     UIView *_pv;
 }
 
@@ -143,50 +142,62 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
 }
 
 - (void)showPass {
-    UIWindow *kw = ym_keyWindow();
-    if (!kw) return;
-    _pv = [[UIView alloc] initWithFrame:kw.bounds];
-    _pv.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
-    _pv.userInteractionEnabled = YES;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        UIWindow *kw = [UIApplication sharedApplication].keyWindow;
+        if (!kw && @available(iOS 13, *)) {
+            for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+                if (![s isKindOfClass:[UIWindowScene class]]) continue;
+                for (UIWindow *w in [(UIWindowScene *)s windows]) {
+                    if (w.isKeyWindow) { kw = w; break; }
+                }
+                if (kw) break;
+            }
+        }
+        if (!kw) return;
+        _pv = [[UIView alloc] initWithFrame:kw.bounds];
+        _pv.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+        _pv.userInteractionEnabled = YES;
 
-    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 160)];
-    box.center = CGPointMake(kw.bounds.size.width/2, kw.bounds.size.height/2);
-    box.backgroundColor = [UIColor blackColor];
-    box.layer.cornerRadius = 16;
+        UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 160)];
+        box.center = CGPointMake(kw.bounds.size.width/2, kw.bounds.size.height/2);
+        box.backgroundColor = [UIColor blackColor];
+        box.layer.cornerRadius = 16;
 
-    UILabel *tt = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 220, 30)];
-    tt.text = @"Abdulilah";
-    tt.textColor = [UIColor whiteColor];
-    tt.font = [UIFont boldSystemFontOfSize:14];
-    tt.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:tt];
+        UILabel *tt = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 220, 30)];
+        tt.text = @"Abdulilah";
+        tt.textColor = [UIColor whiteColor];
+        tt.font = [UIFont boldSystemFontOfSize:14];
+        tt.textAlignment = NSTextAlignmentCenter;
+        [box addSubview:tt];
 
-    UITextField *tf = [[UITextField alloc] initWithFrame:CGRectMake(30, 54, 160, 34)];
-    tf.placeholder = @"515";
-    tf.textAlignment = NSTextAlignmentCenter;
-    tf.keyboardType = UIKeyboardTypeNumberPad;
-    tf.secureTextEntry = YES;
-    tf.textColor = [UIColor whiteColor];
-    tf.font = [UIFont boldSystemFontOfSize:18];
-    tf.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-    tf.layer.cornerRadius = 8;
-    [box addSubview:tf];
+        UITextField *tf = [[UITextField alloc] initWithFrame:CGRectMake(30, 54, 160, 34)];
+        tf.placeholder = @"515";
+        tf.textAlignment = NSTextAlignmentCenter;
+        tf.keyboardType = UIKeyboardTypeNumberPad;
+        tf.secureTextEntry = YES;
+        tf.textColor = [UIColor whiteColor];
+        tf.font = [UIFont boldSystemFontOfSize:18];
+        tf.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
+        tf.layer.cornerRadius = 8;
+        [box addSubview:tf];
 
-    UIButton *un = [UIButton buttonWithType:UIButtonTypeCustom];
-    un.frame = CGRectMake(30, 102, 160, 36);
-    [un setTitle:@"Unlock" forState:UIControlStateNormal];
-    [un setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    un.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
-    un.layer.cornerRadius = 8;
-    un.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    un.tag = 1;
-    [un addTarget:self action:@selector(submit:) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:un];
+        UIButton *un = [UIButton buttonWithType:UIButtonTypeCustom];
+        un.frame = CGRectMake(30, 102, 160, 36);
+        [un setTitle:@"Unlock" forState:UIControlStateNormal];
+        [un setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+        un.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
+        un.layer.cornerRadius = 8;
+        un.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+        un.tag = 1;
+        [un addTarget:self action:@selector(submit:) forControlEvents:UIControlEventTouchUpInside];
+        [box addSubview:un];
 
-    [_pv addSubview:box];
-    [kw addSubview:_pv];
-    [kw bringSubviewToFront:_pv];
-    [tf becomeFirstResponder];
+        [_pv addSubview:box];
+        [kw addSubview:_pv];
+        [kw bringSubviewToFront:_pv];
+        [tf becomeFirstResponder];
+    });
 }
 
 - (void)submit:(UIButton *)s {
@@ -206,17 +217,20 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
     [tf resignFirstResponder];
     [_pv removeFromSuperview];
     _pv = nil;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [self build];
-    });
+    [self build];
 }
 
 - (void)build {
-    UIWindow *kw = ym_keyWindow();
-    if (!kw) return;
-    CGFloat rw = MIN(kw.bounds.size.width - 20, 350);
+    UIView *cv = ym_container();
+    if (!cv) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            [self build];
+        });
+        return;
+    }
+    CGFloat rw = MIN(cv.bounds.size.width - 20, 350);
 
-    self.panel = [[UIView alloc] initWithFrame:CGRectMake((kw.bounds.size.width - rw)/2, (kw.bounds.size.height - 142)/2 - 40, rw, 142)];
+    self.panel = [[UIView alloc] initWithFrame:CGRectMake((cv.bounds.size.width - rw)/2, (cv.bounds.size.height - 142)/2 - 40, rw, 142)];
     self.panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
     self.panel.layer.cornerRadius = 18;
     self.panel.layer.borderWidth = 2;
@@ -307,16 +321,11 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
     [self upd];
     [self.panel addSubview:self.st];
 
-    [kw addSubview:self.panel];
-    [kw bringSubviewToFront:self.panel];
-
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
     pan.cancelsTouchesInView = NO;
-    pan.delaysTouchesBegan = NO;
-    pan.delaysTouchesEnded = NO;
     [self.panel addGestureRecognizer:pan];
 
-    self.dot = [[UIView alloc] initWithFrame:CGRectMake(kw.bounds.size.width - 80, kw.bounds.size.height/2 - 25, 48, 48)];
+    self.dot = [[UIView alloc] initWithFrame:CGRectMake(cv.bounds.size.width - 80, cv.bounds.size.height/2 - 25, 48, 48)];
     self.dot.backgroundColor = [UIColor blackColor];
     self.dot.layer.cornerRadius = 24;
     self.dot.layer.borderWidth = 2.5;
@@ -330,16 +339,9 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
     cl.textAlignment = NSTextAlignmentCenter;
     [self.dot addSubview:cl];
     [self.dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showP)]];
-    UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
-    cp.cancelsTouchesInView = NO;
-    cp.delaysTouchesBegan = NO;
-    cp.delaysTouchesEnded = NO;
-    [self.dot addGestureRecognizer:cp];
-    [kw addSubview:self.dot];
 
-    _t = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
-        [self upd];
-    }];
+    [cv addSubview:self.panel];
+    [cv addSubview:self.dot];
 }
 
 - (void)tapNum:(UIButton *)s {
@@ -353,6 +355,7 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
     }
     if (st.selectedIdx == idx) {
         st.selectedIdx = -1;
+        [self upd];
         return;
     }
     st.selectedIdx = idx;
@@ -372,6 +375,7 @@ static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
     self.onB.layer.borderColor = st.isActive ? [UIColor colorWithRed:1 green:0.2 blue:0.2 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
     [self.n postMic:st.selectedIdx+1];
     [self.n postRun:st.isActive];
+    [self upd];
 }
 
 - (void)tapMs {
@@ -427,9 +431,9 @@ static YallaUI *gUI;
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
-        if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYalla]) return;
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (gUI || !ym_keyWindow()) return;
+        if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYallaBundle]) return;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (gUI) return;
             gUI = [[YallaUI alloc] init];
         });
     }
