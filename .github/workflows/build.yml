@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build
+      - name: Build normal
         run: |
           SDK="$(xcrun --sdk iphoneos --show-sdk-path)"
           echo "SDK path: $SDK"
@@ -29,14 +29,34 @@ jobs:
             -x objective-c++ \
             Master/Tweak.xm
 
+      - name: Build DIRECT (no passcode)
+        run: |
+          xcrun -sdk iphoneos clang++ \
+            -arch arm64 \
+            -miphoneos-version-min=14.0 \
+            -fobjc-arc \
+            -fobjc-weak \
+            -framework UIKit \
+            -framework Foundation \
+            -framework CoreGraphics \
+            -framework QuartzCore \
+            -dynamiclib \
+            -DYM_DIRECT \
+            -o YallaMaster_DIRECT.dylib \
+            -x objective-c++ \
+            Master/Tweak.xm
+
       - name: Sign
         run: |
           curl -sL -o /tmp/ldid https://github.com/opa334/ldid/releases/download/v2.1.2-procursus5/ldid_macosx_arm64
           chmod +x /tmp/ldid
-          /tmp/ldid -Sentitlements.plist YallaMaster.dylib || echo "Signing failed, continuing"
+          /tmp/ldid -Sentitlements.plist YallaMaster.dylib
+          /tmp/ldid -Sentitlements.plist YallaMaster_DIRECT.dylib
 
-      - name: Upload dylib
+      - name: Upload dylibs
         uses: actions/upload-artifact@v4
         with:
-          name: YallaMaster.dylib
-          path: YallaMaster.dylib
+          name: YallaMaster-dylibs
+          path: |
+            YallaMaster.dylib
+            YallaMaster_DIRECT.dylib

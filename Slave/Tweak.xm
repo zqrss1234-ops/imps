@@ -21,16 +21,18 @@ static void ys_installCrashProtection(void) {
 #define YS_TRY(op) @try { op; } @catch (NSException *e) { NSLog(@"[YallaSlave] exception=%@ reason=%@", e.name, e.reason); }
 
 static UIWindow *ys_keyWindow(void) {
+    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
+    if (kw) return kw;
     if (@available(iOS 13, *)) {
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                UIWindowScene *ws = (UIWindowScene *)scene;
-                UIWindow *w = ws.keyWindow;
-                if (w) return w;
+        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]]) {
+                for (UIWindow *w in [(UIWindowScene *)s windows]) {
+                    if (w.isKeyWindow) return w;
+                }
             }
         }
     }
-    return [UIApplication sharedApplication].keyWindow;
+    return nil;
 }
 
 static NSString *const kNotifyPrefix = @"com.yalla.liteagent.cmd.";

@@ -3,61 +3,43 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
-#pragma mark - Crash Prevention
+#define YM_TRY(op) @try { op; } @catch (NSException *e) { NSLog(@"[YallaMaster] %@", e); }
 
-static void ym_uncaughtExceptionHandler(NSException *exception) {
-    NSLog(@"[YallaMaster] exception=%@ reason=%@", exception.name, exception.reason);
-}
-
-static void ym_installCrashProtection(void) {
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{
-        NSSetUncaughtExceptionHandler(&ym_uncaughtExceptionHandler);
-    });
-}
-
-#define YM_TRY_CXX(op, slot) @try { op; } @catch (NSException *e) { NSLog(@"[YallaMaster] " slot @" CXX exception name=%@ reason=%@", e.name, e.reason); }
-#define YM_TRY_MIC(op) @try { op; } @catch (NSException *e) { NSLog(@"[YallaMaster] tapMic exception name=%@ reason=%@", e.name, e.reason); }
-#define YM_TRY(op) @try { op; } @catch (NSException *e) { NSLog(@"[YallaMaster] exception=%@ reason=%@", e.name, e.reason); }
-
-// Safe keyWindow for iOS 13+ scene-based apps
 static UIWindow *ym_keyWindow(void) {
+    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
+    if (kw) return kw;
     if (@available(iOS 13, *)) {
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if ([scene isKindOfClass:[UIWindowScene class]]) {
-                UIWindowScene *ws = (UIWindowScene *)scene;
-                UIWindow *w = ws.keyWindow;
-                if (w) return w;
+        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+            if ([s isKindOfClass:[UIWindowScene class]]) {
+                for (UIWindow *w in [(UIWindowScene *)s windows]) {
+                    if (w.isKeyWindow) return w;
+                }
             }
         }
     }
-    return [UIApplication sharedApplication].keyWindow;
+    return nil;
 }
 
-#pragma mark - Config
-
 static NSString *const kYalla = @"com.yalla.yallalite";
+
 static int const kMsVals[5] = {50, 25, 10, 5, 1};
 static NSString *const kNameList[8] = {
     @"Abdulilah", @"Lahlouh", @"Charo", @"Abu Mutab",
     @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas"
 };
 
-#pragma mark - State
-
-@interface YMState : NSObject
+@interface YallaState : NSObject
 @property (nonatomic, assign) int selectedIdx;
 @property (nonatomic, assign) int msIdx;
 @property (nonatomic, assign) BOOL isActive;
-@property (nonatomic, assign) BOOL liteOn;
 @property (nonatomic, assign) BOOL cxxOn;
+@property (nonatomic, assign) BOOL liteOn;
 + (instancetype)s;
 - (int)ms;
 @end
-
-@implementation YMState
+@implementation YallaState
 + (instancetype)s {
-    static YMState *x = nil;
+    static YallaState *x;
     static dispatch_once_t t;
     dispatch_once(&t, ^{ x = [[self alloc] init]; });
     return x;
@@ -66,73 +48,21 @@ static NSString *const kNameList[8] = {
     if ((self = [super init])) {
         _selectedIdx = -1;
         _msIdx = 2;
-        _isActive = NO; _liteOn = NO; _cxxOn = NO;
     }
     return self;
 }
 - (int)ms { return kMsVals[self.msIdx]; }
 @end
 
-#pragma mark - Slave Registry (shared state within process)
-
-@interface YMSlaveRegistry : NSObject
-@property (nonatomic, strong) NSMutableSet *slaves;
-@property (nonatomic, strong) NSLock *lock;
-+ (instancetype)shared;
-- (int)count;
-- (void)add:(NSString *)uuid;
-- (void)remove:(NSString *)uuid;
-@end
-
-@implementation YMSlaveRegistry
-+ (instancetype)shared {
-    static YMSlaveRegistry *x = nil;
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{ x = [[self alloc] init]; });
-    return x;
-}
-- (instancetype)init {
-    if ((self = [super init])) {
-        _slaves = [NSMutableSet set];
-        _lock = [[NSLock alloc] init];
-    }
-    return self;
-}
-- (int)count {
-    [_lock lock];
-    int c = (int)_slaves.count;
-    [_lock unlock];
-    return c;
-}
-- (void)add:(NSString *)uuid {
-    [_lock lock];
-    [_slaves addObject:uuid];
-    [_lock unlock];
-}
-- (void)remove:(NSString *)uuid {
-    [_lock lock];
-    [_slaves removeObject:uuid];
-    [_lock unlock];
-}
-@end
-
-#pragma mark - Cross-Process Tap Registry (Darwin heartbeat)
-
-static NSString *const kTapPrefix = @"com.yalla.liteagent.cmd.tap.";
-
-@interface YMTapRegistry : NSObject
+@interface TapReg : NSObject
 @property (nonatomic, strong) NSMutableDictionary *taps;
 @property (nonatomic, strong) NSLock *lock;
-@property (nonatomic, assign) int totalEver;
-@property (nonatomic, assign) int cxxCount;
 + (instancetype)shared;
-- (int)activeCount;
-- (void)prune;
+- (int)cnt;
 @end
-
-@implementation YMTapRegistry
+@implementation TapReg
 + (instancetype)shared {
-    static YMTapRegistry *x = nil;
+    static TapReg *x;
     static dispatch_once_t t;
     dispatch_once(&t, ^{ x = [[self alloc] init]; });
     return x;
@@ -144,437 +74,93 @@ static NSString *const kTapPrefix = @"com.yalla.liteagent.cmd.tap.";
     }
     return self;
 }
-- (int)activeCount {
+- (int)cnt {
     [_lock lock];
     int c = (int)_taps.count;
     [_lock unlock];
     return c;
 }
-- (void)receivedTapFromUUID:(NSString *)uuid {
+- (void)recv:(NSString *)u {
     [_lock lock];
-    _taps[uuid] = @([[NSDate date] timeIntervalSince1970]);
-    int cur = (int)_taps.count;
-    if (cur > _totalEver) _totalEver = cur;
+    _taps[u] = @([[NSDate date] timeIntervalSince1970]);
+    if ((int)_taps.count > _totalEver) _totalEver = (int)_taps.count;
     [_lock unlock];
 }
 - (void)prune {
-    NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
     [_lock lock];
+    double now = [[NSDate date] timeIntervalSince1970];
     NSMutableArray *stale = [NSMutableArray array];
-    [_taps enumerateKeysAndObjectsUsingBlock:^(NSString *key, NSNumber *val, BOOL *stop) {
-        if (now - [val doubleValue] > 12.0) [stale addObject:key];
+    [_taps enumerateKeysAndObjectsUsingBlock:^(id k, NSNumber *v, BOOL *s) {
+        if (now - v.doubleValue > 12) [stale addObject:k];
     }];
     [_taps removeObjectsForKeys:stale];
     [_lock unlock];
 }
 @end
 
-static void ym_onTapNotification(CFNotificationCenterRef center, void *observer,
-                                  CFStringRef name, const void *object,
-                                  CFDictionaryRef userInfo) {
-    NSString *n = (__bridge NSString *)name;
-    if (![n hasPrefix:kTapPrefix]) return;
-    NSString *uuid = [n substringFromIndex:kTapPrefix.length];
-    if (uuid.length > 0) {
-        [[YMTapRegistry shared] receivedTapFromUUID:uuid];
-    }
-}
+static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
 
-static void ym_startTapObserver(void) {
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{
-        CFNotificationCenterAddObserver(
-            CFNotificationCenterGetDarwinNotifyCenter(),
-            NULL,
-            ym_onTapNotification,
-            NULL, // observe all
-            NULL,
-            CFNotificationSuspensionBehaviorDeliverImmediately);
-
-        dispatch_async(dispatch_get_main_queue(), ^{
-            [NSTimer scheduledTimerWithTimeInterval:5.0 repeats:YES block:^(NSTimer *t) {
-                [[YMTapRegistry shared] prune];
-            }];
-        });
-    });
-}
-
-#pragma mark - Darwin Notification IPC
-
-static __weak id s_cachedMicFace = nil;
-
-static id ym_findMicFace(void) {
-    id face = s_cachedMicFace;
-    if (face) return face;
-    UIWindow *kw = ym_keyWindow();
-    if (!kw) return nil;
-    __block id found = nil;
-    void (^search)(UIView *) = ^(UIView *v) {
-        if (found) return;
-        NSString *cn = NSStringFromClass([v class]);
-        if ([cn containsString:@"LTLivemikeFace"] || [cn containsString:@"LiveMikeFace"]) { found = v; return; }
-        for (UIView *sv in v.subviews) search(sv);
-    };
-    search(kw);
-    if (found) s_cachedMicFace = found;
-    return found;
-}
-
-static NSString *const kNotifyPrefix = @"com.yalla.liteagent.cmd.";
-
-@interface YMNotify : NSObject
-- (void)post:(NSString *)name;
-- (void)postSpeed:(int)ms;
-- (void)postMic:(long)slot;
-- (void)postCxx:(BOOL)on;
-- (void)postLite:(BOOL)on;
-- (void)postRun:(BOOL)on;
-- (void)postTap;
+@interface Notifier : NSObject
+- (void)post:(NSString *)n;
+- (void)postMic:(long)s;
+- (void)postRun:(BOOL)o;
 @end
-
-@implementation YMNotify
+@implementation Notifier
 - (void)post:(NSString *)name {
-    NSString *full = [kNotifyPrefix stringByAppendingString:name];
+    NSString *full = [NSString stringWithFormat:@"%s%@", kTapPrefix, name];
     CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                          (__bridge CFStringRef)full,
-                                          NULL, NULL, true);
-    NSLog(@"[YallaMaster] posted: %@", full);
-
-    YM_TRY({
-        SEL pc = NSSelectorFromString(@"postCommand:");
-        id mf = ym_findMicFace();
-        if (mf && [mf respondsToSelector:pc]) {
-            ((void (*)(id, SEL, id))[mf methodForSelector:pc])(mf, pc, full);
-        }
-    });
+                                          (__bridge CFStringRef)full, NULL, NULL, true);
 }
-- (void)postSpeed:(int)ms {
-    [self post:[NSString stringWithFormat:@"speed.%d", ms]];
-}
-- (void)postMic:(long)slot {
-    [self post:[NSString stringWithFormat:@"mic.%ld", (long)slot]];
-}
-- (void)postCxx:(BOOL)on {
-    [self post:on ? @"cxx.face" : @"cxx.safe"];
-}
-- (void)postLite:(BOOL)on {
-    [self post:on ? @"lite.on" : @"lite.off"];
-}
-- (void)postRun:(BOOL)on {
-    [self post:on ? @"run.on" : @"run.off"];
-}
-- (void)postTap {
-    [self post:@"tap"];
-}
+- (void)postMic:(long)s { [self post:[NSString stringWithFormat:@"mic.%ld", s]]; }
+- (void)postRun:(BOOL)o { [self post:o ? @"run.on" : @"run.off"]; }
 @end
 
-#pragma mark - Glitch Engine (App Freeze - FlexList CXX Style)
-
-/*
- * The glitch freezes the mic status display inside Yalla Lite
- * while keeping chat and audio functional.
- * Effect: you can't see who raised/lowered their mic = competitive edge.
- *
- * Uses method swizzling at runtime to intercept mic update methods.
- * Replace the placeholder selectors below once headers are available.
- */
-
-@interface YMGlitch : NSObject
-@property (nonatomic, assign) BOOL active;
-@property (nonatomic, strong) NSTimer *antiLag;
-@property (nonatomic, assign) BOOL isFrozen;
-
-+ (instancetype)g;
-- (void)enable:(BOOL)en ms:(int)msVal;
-- (void)freeze;
-- (void)unfreeze;
-- (void)invokeCxxOnMicFace;
-- (void)invokeSafeCxxOnMicFace;
-@end
-
-@implementation YMGlitch
-
-static BOOL glitchBlock = NO;
-
-+ (instancetype)g {
-    static YMGlitch *x = nil;
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{ x = [[self alloc] init]; });
-    return x;
-}
-- (instancetype)init {
-    if ((self = [super init])) { }
-    return self;
-}
-
-- (void)enable:(BOOL)en ms:(int)msVal {
-    self.active = en;
-    if (self.antiLag) { [self.antiLag invalidate]; self.antiLag = nil; }
-    if (en) {
-        [self freeze];
-        self.antiLag = [NSTimer scheduledTimerWithTimeInterval:MAX(0.5, msVal*0.01) repeats:YES block:^(NSTimer *t) {
-            if (glitchBlock) {
-                UIWindow *kw = ym_keyWindow();
-                if (!kw) return;
-                [self invokeCxxOnMicFace];
-                [self freezeMicFaceViews:kw];
-                [self freezeMicViews:kw];
-            }
-        }];
-    } else {
-        [self unfreeze];
-    }
-}
-
-- (void)freeze {
-    glitchBlock = YES;
-    self.isFrozen = YES;
-
-    // Try calling cxxNoSync on LTLivemikeFace (from analyzed dylib)
-    [self invokeCxxOnMicFace];
-
-    // Hook ALL mic face methods once (FlexList cxx style = freeze the class)
-    Class micClass = NSClassFromString(@"LTLivemikeFace");
-    if (!micClass) micClass = NSClassFromString(@"YallaLite.LTLivemikeFace");
-    if (micClass) {
-        static dispatch_once_t mfOnce;
-        dispatch_once(&mfOnce, ^{
-            unsigned int mc = 0;
-            Method *methods = class_copyMethodList(micClass, &mc);
-            for (unsigned int i = 0; i < mc; i++) {
-                SEL sel = method_getName(methods[i]);
-                const char *name = sel_getName(sel);
-                NSLog(@"[YallaMaster] LTLivemikeFace: %s", name);
-
-                NSString *s = [NSString stringWithUTF8String:name];
-                if ([s containsString:@"cxx"] || [s containsString:@"update"] ||
-                    [s containsString:@"refresh"] || [s containsString:@"reload"] ||
-                    [s containsString:@"status"] || [s containsString:@"setMic"] ||
-                    [s containsString:@"display"] || [s containsString:@"show"] ||
-                    [s containsString:@"layout"] || [s containsString:@"render"]) {
-                    IMP origIMP = method_getImplementation(methods[i]);
-                    method_setImplementation(methods[i], imp_implementationWithBlock(^(id self) {
-                        if (!glitchBlock) {
-                            ((void (*)(id, SEL))origIMP)(self, sel);
-                        }
-                    }));
-                    NSLog(@"[YallaMaster] HOOKED: %s", name);
-                }
-            }
-            free(methods);
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                UIWindow *kw = ym_keyWindow();
-                if (kw) [self freezeMicFaceViews:kw];
-            });
-        });
-
-        UIWindow *kw = ym_keyWindow();
-        if (kw) [self freezeMicFaceViews:kw];
-    }
-
-    static dispatch_once_t roomOnce;
-    dispatch_once(&roomOnce, ^{
-        NSArray *roomNames = @[@"YallaRoomViewController", @"LTLiveRoomVC",
-                               @"RoomViewController", @"YallaLiveViewController"];
-        for (NSString *rn in roomNames) {
-            Class rc = NSClassFromString(rn);
-            if (rc) {
-                unsigned int mc = 0;
-                Method *methods = class_copyMethodList(rc, &mc);
-                for (unsigned int i = 0; i < mc; i++) {
-                    SEL sel = method_getName(methods[i]);
-                    const char *name = sel_getName(sel);
-                    NSString *s = [NSString stringWithUTF8String:name];
-                    if ([s containsString:@"refreshMic"] || [s containsString:@"updateMic"] ||
-                        [s containsString:@"reloadMicList"] || [s containsString:@"micStatus"] ||
-                        [s containsString:@"reloadData"]) {
-                        IMP origIMP = method_getImplementation(methods[i]);
-                        method_setImplementation(methods[i], imp_implementationWithBlock(^(id self) {
-                            if (!glitchBlock) {
-                                ((void (*)(id, SEL))origIMP)(self, sel);
-                            }
-                        }));
-                        NSLog(@"[YallaMaster] HOOKED room %@: %s", rn, name);
-                    }
-                }
-                free(methods);
-                break;
-            }
-        }
-    });
-
-    UIWindow *kw = ym_keyWindow();
-    if (kw) [self freezeMicViews:kw];
-}
-
-- (void)unfreeze {
-    glitchBlock = NO;
-    self.isFrozen = NO;
-
-    [self invokeSafeCxxOnMicFace];
-
-    UIWindow *kw = ym_keyWindow();
-    if (kw) [self restoreMicViews:kw];
-}
-
-- (void)invokeCxxOnMicFace {
-    id face = ym_findMicFace();
-    if (!face) return;
-
-    YM_TRY_CXX({
-        SEL d6s = NSSelectorFromString(@"d6s:result:");
-        if ([face respondsToSelector:d6s]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:d6s])(face, d6s, @(1), nil);
-        }
-    }, @"OLD");
-
-    YM_TRY_CXX({
-        SEL c7rs = NSSelectorFromString(@"c7rs:result:");
-        if ([face respondsToSelector:c7rs]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:c7rs])(face, c7rs, @(1), nil);
-        }
-    }, @"OLD");
-
-    YM_TRY_CXX({
-        SEL c7rsChat = NSSelectorFromString(@"c7rsInsideChatOnly:result:");
-        if ([face respondsToSelector:c7rsChat]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:c7rsChat])(face, c7rsChat, @(1), nil);
-        }
-    }, @"OLD");
-
-    YM_TRY_CXX({
-        SEL cxxSel = NSSelectorFromString(@"cxxNoSync");
-        if ([face respondsToSelector:cxxSel]) {
-            ((void (*)(id, SEL))[face methodForSelector:cxxSel])(face, cxxSel);
-        }
-    }, @"OLD");
-}
-
-- (void)invokeSafeCxxOnMicFace {
-    id face = ym_findMicFace();
-    if (!face) return;
-
-    YM_TRY_CXX({
-        SEL d6s = NSSelectorFromString(@"d6s:result:");
-        if ([face respondsToSelector:d6s]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:d6s])(face, d6s, @(0), nil);
-        }
-    }, @"SAFE");
-
-    YM_TRY_CXX({
-        SEL c7rs = NSSelectorFromString(@"c7rs:result:");
-        if ([face respondsToSelector:c7rs]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:c7rs])(face, c7rs, @(0), nil);
-        }
-    }, @"SAFE");
-
-    YM_TRY_CXX({
-        SEL c7rsChat = NSSelectorFromString(@"c7rsInsideChatOnly:result:");
-        if ([face respondsToSelector:c7rsChat]) {
-            ((void (*)(id, SEL, id, id))[face methodForSelector:c7rsChat])(face, c7rsChat, @(0), nil);
-        }
-    }, @"SAFE");
-
-    YM_TRY_CXX({
-        SEL safeSel = NSSelectorFromString(@"safeCxxNoSync");
-        if ([face respondsToSelector:safeSel]) {
-            ((void (*)(id, SEL))[face methodForSelector:safeSel])(face, safeSel);
-        }
-    }, @"SAFE");
-}
-
-- (void)freezeMicViews:(UIView *)v {
-    [v.subviews enumerateObjectsUsingBlock:^(__kindof UIView *sv, NSUInteger idx, BOOL *stop) {
-        NSString *cn = NSStringFromClass([sv class]);
-        if ([cn containsString:@"Mic"] || [cn containsString:@"microphone"] ||
-            [cn containsString:@"Microphone"] || [cn containsString:@"Voice"] ||
-            [cn containsString:@"voice"]) {
-            sv.layer.speed = 0.0;
-            sv.alpha = MAX(0.02, sv.alpha * 0.3);
-        }
-        if (sv.subviews.count) [self freezeMicViews:sv];
-    }];
-}
-
-- (void)restoreMicViews:(UIView *)v {
-    [v.subviews enumerateObjectsUsingBlock:^(__kindof UIView *sv, NSUInteger idx, BOOL *stop) {
-        NSString *cn = NSStringFromClass([sv class]);
-        if ([cn containsString:@"Mic"] || [cn containsString:@"microphone"] ||
-            [cn containsString:@"Microphone"] || [cn containsString:@"Voice"] ||
-            [cn containsString:@"voice"]) {
-            sv.layer.speed = 1.0;
-            sv.alpha = MIN(1.0, sv.alpha / 0.3);
-        }
-        if (sv.subviews.count) [self restoreMicViews:sv];
-    }];
-}
-
-- (void)freezeMicFaceViews:(UIView *)v {
-    for (UIView *sv in v.subviews) {
-        NSString *cn = NSStringFromClass([sv class]);
-        if ([cn containsString:@"LTLivemikeFace"] || [cn containsString:@"LiveMikeFace"] ||
-            [cn containsString:@"mic"] || [cn containsString:@"Mic"] ||
-            [cn containsString:@"microphone"] || [cn containsString:@"Microphone"]) {
-            sv.layer.speed = 0.0;
-            sv.hidden = YES;
-        }
-        if (sv.subviews.count) [self freezeMicFaceViews:sv];
-    }
-}
-
-- (void)dealloc {
-    [self.antiLag invalidate];
-}
-@end
-
-#pragma mark - UI
-
-@interface YMUI : NSObject
-@property (nonatomic, strong) UIView *rect;
-@property (nonatomic, strong) UIView *circle;
-@property (nonatomic, strong) UIView *passcodeView;
-@property (nonatomic, strong) NSMutableArray *btns;
-@property (nonatomic, strong) UIButton *onBtn, *msBtn, *cxxBtn, *liteBtn, *hideBtn;
+@interface YallaUI : NSObject
+@property (nonatomic, strong) UIView *panel;
+@property (nonatomic, strong) UIView *dot;
+@property (nonatomic, strong) NSMutableArray *numBtns;
+@property (nonatomic, strong) UIButton *onB, *msB, *cxxB, *liteB, *hideB;
 @property (nonatomic, strong) UILabel *st;
-@property (nonatomic, strong) YMNotify *notify;
-@property (nonatomic, strong) NSTimer *updTimer;
+@property (nonatomic, strong) Notifier *n;
 - (void)build;
-- (void)showPasscode;
 @end
 
-@implementation YMUI
+@implementation YallaUI {
+    NSTimer *_t;
+    UIView *_pv;
+}
+
 - (instancetype)init {
     if ((self = [super init])) {
-        self.btns = [NSMutableArray array];
-        self.notify = [[YMNotify alloc] init];
-        [self showPasscode];
+        _n = [[Notifier alloc] init];
+        _numBtns = [NSMutableArray array];
+#ifndef YM_DIRECT
+        [self showPass];
+#else
+        dispatch_async(dispatch_get_main_queue(), ^{ [self build]; });
+#endif
     }
     return self;
 }
 
-- (void)showPasscode {
+- (void)showPass {
     UIWindow *kw = ym_keyWindow();
     if (!kw) return;
-
-    self.passcodeView = [[UIView alloc] initWithFrame:kw.bounds];
-    self.passcodeView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
-    self.passcodeView.userInteractionEnabled = YES;
-    self.passcodeView.tag = 999;
+    _pv = [[UIView alloc] initWithFrame:kw.bounds];
+    _pv.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+    _pv.userInteractionEnabled = YES;
 
     UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 160)];
     box.center = CGPointMake(kw.bounds.size.width/2, kw.bounds.size.height/2);
     box.backgroundColor = [UIColor blackColor];
     box.layer.cornerRadius = 16;
-    box.layer.borderWidth = 2;
-    box.layer.borderColor = [UIColor colorWithWhite:0.15 alpha:0.8].CGColor;
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 220, 30)];
-    title.text = @"Abdulilah";
-    title.textColor = [UIColor whiteColor];
-    title.font = [UIFont boldSystemFontOfSize:14];
-    title.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:title];
+    UILabel *tt = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 220, 30)];
+    tt.text = @"Abdulilah";
+    tt.textColor = [UIColor whiteColor];
+    tt.font = [UIFont boldSystemFontOfSize:14];
+    tt.textAlignment = NSTextAlignmentCenter;
+    [box addSubview:tt];
 
     UITextField *tf = [[UITextField alloc] initWithFrame:CGRectMake(30, 54, 160, 34)];
     tf.placeholder = @"515";
@@ -585,78 +171,59 @@ static BOOL glitchBlock = NO;
     tf.font = [UIFont boldSystemFontOfSize:18];
     tf.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
     tf.layer.cornerRadius = 8;
-    tf.layer.borderWidth = 1;
-    tf.layer.borderColor = [UIColor colorWithWhite:0.2 alpha:0.8].CGColor;
     [box addSubview:tf];
 
-    UIButton *unlock = [UIButton buttonWithType:UIButtonTypeCustom];
-    unlock.frame = CGRectMake(30, 102, 160, 36);
-    [unlock setTitle:@"Unlock" forState:UIControlStateNormal];
-    [unlock setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    unlock.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
-    unlock.layer.cornerRadius = 8;
-    unlock.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    [unlock addTarget:self action:@selector(passcodeSubmit:) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:unlock];
+    UIButton *un = [UIButton buttonWithType:UIButtonTypeCustom];
+    un.frame = CGRectMake(30, 102, 160, 36);
+    [un setTitle:@"Unlock" forState:UIControlStateNormal];
+    [un setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    un.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
+    un.layer.cornerRadius = 8;
+    un.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    un.tag = 1;
+    [un addTarget:self action:@selector(submit:) forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:un];
 
-    [self.passcodeView addSubview:box];
-    [kw addSubview:self.passcodeView];
-    [kw bringSubviewToFront:self.passcodeView];
+    [_pv addSubview:box];
+    [kw addSubview:_pv];
+    [kw bringSubviewToFront:_pv];
     [tf becomeFirstResponder];
 }
 
-- (void)passcodeSubmit:(UIButton *)s {
-    UIView *box = s.superview;
-    UITextField *tf = nil;
-    for (UIView *v in box.subviews) {
-        if ([v isKindOfClass:[UITextField class]]) {
-            tf = (UITextField *)v;
-            break;
-        }
-    }
+- (void)submit:(UIButton *)s {
+    UITextField *tf = (UITextField *)s.superview.subviews[1];
     NSString *code = tf.text ?: @"";
     if (![code isEqualToString:@"515"]) {
-        CABasicAnimation *shake = [CABasicAnimation animationWithKeyPath:@"position"];
-        shake.duration = 0.06;
-        shake.repeatCount = 3;
-        shake.autoreverses = YES;
-        shake.fromValue = [NSValue valueWithCGPoint:CGPointMake(box.center.x - 8, box.center.y)];
-        shake.toValue = [NSValue valueWithCGPoint:CGPointMake(box.center.x + 8, box.center.y)];
-        [box.layer addAnimation:shake forKey:@"shake"];
+        CABasicAnimation *sh = [CABasicAnimation animationWithKeyPath:@"position"];
+        sh.duration = 0.06;
+        sh.repeatCount = 3;
+        sh.autoreverses = YES;
+        sh.fromValue = [NSValue valueWithCGPoint:CGPointMake(s.superview.center.x - 8, s.superview.center.y)];
+        sh.toValue = [NSValue valueWithCGPoint:CGPointMake(s.superview.center.x + 8, s.superview.center.y)];
+        [s.superview.layer addAnimation:sh forKey:@"sh"];
         tf.text = @"";
         return;
     }
-
     [tf resignFirstResponder];
-    [self.passcodeView removeFromSuperview];
-    self.passcodeView = nil;
-
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    [_pv removeFromSuperview];
+    _pv = nil;
+    dispatch_async(dispatch_get_main_queue(), ^{
         [self build];
-        [self.updTimer invalidate];
-        self.updTimer = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
-            [self upd];
-        }];
     });
 }
 
 - (void)build {
     UIWindow *kw = ym_keyWindow();
     if (!kw) return;
-
     CGFloat rw = MIN(kw.bounds.size.width - 20, 350);
-    CGFloat rh = 200;
 
-    self.rect = [[UIView alloc] initWithFrame:CGRectMake((kw.bounds.size.width - rw)/2,
-                                                         (kw.bounds.size.height - rh)/2 - 60,
-                                                         rw, rh)];
-    self.rect.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
-    self.rect.layer.cornerRadius = 18;
-    self.rect.layer.borderWidth = 2;
-    self.rect.layer.borderColor = [UIColor blackColor].CGColor;
-    self.rect.clipsToBounds = YES;
+    self.panel = [[UIView alloc] initWithFrame:CGRectMake((kw.bounds.size.width - rw)/2, (kw.bounds.size.height - 142)/2 - 40, rw, 142)];
+    self.panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
+    self.panel.layer.cornerRadius = 18;
+    self.panel.layer.borderWidth = 2;
+    self.panel.layer.borderColor = [UIColor blackColor].CGColor;
+    self.panel.clipsToBounds = YES;
 
-    // Names
     UIView *nr = [[UIView alloc] initWithFrame:CGRectMake(0, 0, rw, 38)];
     for (int i = 0; i < 8; i++) {
         int col = i % 4, row = i / 4;
@@ -668,24 +235,19 @@ static BOOL glitchBlock = NO;
         l.minimumScaleFactor = 0.6;
         [nr addSubview:l];
     }
-    [self.rect addSubview:nr];
+    [self.panel addSubview:nr];
 
-    // Sep
     UIView *s1 = [[UIView alloc] initWithFrame:CGRectMake(0, 38, rw, 1)];
     s1.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.5];
-    [self.rect addSubview:s1];
+    [self.panel addSubview:s1];
 
-    // Numbers LTR: 1 on left, 10 on right
     UIView *numRow = [[UIView alloc] initWithFrame:CGRectMake(0, 42, rw, 40)];
-    numRow.backgroundColor = [UIColor clearColor];
     CGFloat bw = 26, gap = 4;
-    CGFloat startX = (rw - (bw * 10 + gap * 9)) / 2;
+    CGFloat sx = (rw - (bw * 10 + gap * 9)) / 2;
     for (int i = 0; i < 10; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        CGFloat x = startX + i * (bw + gap);
-        b.frame = CGRectMake(x, 5, bw, 30);
+        b.frame = CGRectMake(sx + i * (bw + gap), 5, bw, 30);
         b.layer.cornerRadius = 7;
-        b.layer.masksToBounds = YES;
         b.backgroundColor = [UIColor blackColor];
         b.layer.borderWidth = 1.5;
         b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
@@ -695,261 +257,181 @@ static BOOL glitchBlock = NO;
         b.tag = i;
         [b addTarget:self action:@selector(tapNum:) forControlEvents:UIControlEventTouchUpInside];
         [numRow addSubview:b];
-        [self.btns addObject:b];
+        [self.numBtns addObject:b];
     }
-    [self.rect addSubview:numRow];
+    [self.panel addSubview:numRow];
 
-    // Sep
     UIView *s2 = [[UIView alloc] initWithFrame:CGRectMake(0, 82, rw, 1.5)];
     s2.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.5];
-    [self.rect addSubview:s2];
+    [self.panel addSubview:s2];
 
-    // Controls RTL: hide | lite | cxx | ms | on
-    NSArray *ids = @[@"hide", @"lite", @"cxx", @"ms", @"on"];
+    NSArray *cids = @[@"hide", @"lite", @"cxx", @"ms", @"on"];
     CGFloat cw = (rw - 24) / 5;
     for (int i = 0; i < 5; i++) {
-        NSString *cid = ids[i];
+        NSString *cid = cids[i];
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        CGFloat x = 10 + (4 - i) * (cw + 2);
-        b.frame = CGRectMake(x, 87, cw, 30);
+        b.frame = CGRectMake(10 + (4 - i) * (cw + 2), 87, cw, 30);
         b.layer.cornerRadius = 8;
-        b.layer.masksToBounds = YES;
         b.titleLabel.font = [UIFont boldSystemFontOfSize:10];
         b.layer.borderWidth = 1;
-
+        b.backgroundColor = [UIColor blackColor];
+        b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
+        [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         if ([cid isEqualToString:@"on"]) {
-            b.backgroundColor = [UIColor blackColor];
-            b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
             [b setTitle:@"ON" forState:UIControlStateNormal];
-            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             [b addTarget:self action:@selector(tapOn) forControlEvents:UIControlEventTouchUpInside];
-            self.onBtn = b;
+            self.onB = b;
         } else if ([cid isEqualToString:@"ms"]) {
-            b.backgroundColor = [UIColor blackColor];
-            b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
             [b setTitle:@"ms:10" forState:UIControlStateNormal];
-            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             [b addTarget:self action:@selector(tapMs) forControlEvents:UIControlEventTouchUpInside];
-            self.msBtn = b;
+            self.msB = b;
         } else if ([cid isEqualToString:@"cxx"]) {
-            b.backgroundColor = [UIColor blackColor];
-            b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
             [b setTitle:@"cxx" forState:UIControlStateNormal];
-            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             [b addTarget:self action:@selector(tapCxx) forControlEvents:UIControlEventTouchUpInside];
-            self.cxxBtn = b;
+            self.cxxB = b;
         } else if ([cid isEqualToString:@"lite"]) {
-            b.backgroundColor = [UIColor blackColor];
-            b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
             [b setTitle:@"LiTE" forState:UIControlStateNormal];
-            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             [b addTarget:self action:@selector(tapLite) forControlEvents:UIControlEventTouchUpInside];
-            self.liteBtn = b;
+            self.liteB = b;
         } else if ([cid isEqualToString:@"hide"]) {
-            b.backgroundColor = [UIColor blackColor];
-            b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
             [b setTitle:@"Hide" forState:UIControlStateNormal];
-            [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
             [b addTarget:self action:@selector(tapHide) forControlEvents:UIControlEventTouchUpInside];
-            self.hideBtn = b;
+            self.hideB = b;
         }
-        [self.rect addSubview:b];
+        [self.panel addSubview:b];
     }
 
-    // Status
     self.st = [[UILabel alloc] initWithFrame:CGRectMake(0, 120, rw, 16)];
     self.st.textAlignment = NSTextAlignmentCenter;
     self.st.textColor = [UIColor whiteColor];
     self.st.font = [UIFont systemFontOfSize:9];
     [self upd];
-    [self.rect addSubview:self.st];
+    [self.panel addSubview:self.st];
 
-    CGFloat th = 142;
-    self.rect.frame = CGRectMake((kw.bounds.size.width - rw)/2, (kw.bounds.size.height - th)/2 - 40, rw, th);
+    [kw addSubview:self.panel];
+    [kw bringSubviewToFront:self.panel];
 
-    [kw addSubview:self.rect];
-    [kw bringSubviewToFront:self.rect];
-
-    // Draggable panel - must not block button taps
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
     pan.cancelsTouchesInView = NO;
     pan.delaysTouchesBegan = NO;
     pan.delaysTouchesEnded = NO;
-    [self.rect addGestureRecognizer:pan];
+    [self.panel addGestureRecognizer:pan];
 
-    // Circle hidden
-    self.circle = [[UIView alloc] initWithFrame:CGRectMake(kw.bounds.size.width - 80, kw.bounds.size.height/2 - 25, 48, 48)];
-    self.circle.backgroundColor = [UIColor blackColor];
-    self.circle.layer.cornerRadius = 24;
-    self.circle.layer.borderWidth = 2.5;
-    self.circle.layer.borderColor = [UIColor blackColor].CGColor;
-    self.circle.hidden = YES;
-    self.circle.userInteractionEnabled = YES;
-    UILabel *cl = [[UILabel alloc] initWithFrame:self.circle.bounds];
+    self.dot = [[UIView alloc] initWithFrame:CGRectMake(kw.bounds.size.width - 80, kw.bounds.size.height/2 - 25, 48, 48)];
+    self.dot.backgroundColor = [UIColor blackColor];
+    self.dot.layer.cornerRadius = 24;
+    self.dot.layer.borderWidth = 2.5;
+    self.dot.layer.borderColor = [UIColor blackColor].CGColor;
+    self.dot.hidden = YES;
+    self.dot.userInteractionEnabled = YES;
+    UILabel *cl = [[UILabel alloc] initWithFrame:self.dot.bounds];
     cl.text = @"515";
     cl.textColor = [UIColor colorWithWhite:1 alpha:0.7];
     cl.font = [UIFont boldSystemFontOfSize:13];
     cl.textAlignment = NSTextAlignmentCenter;
-    [self.circle addSubview:cl];
-    UITapGestureRecognizer *ct = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showRect)];
-    [self.circle addGestureRecognizer:ct];
-    UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    [self.dot addSubview:cl];
+    [self.dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showP)]];
+    UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
     cp.cancelsTouchesInView = NO;
     cp.delaysTouchesBegan = NO;
     cp.delaysTouchesEnded = NO;
-    [self.circle addGestureRecognizer:cp];
-    [kw addSubview:self.circle];
+    [self.dot addGestureRecognizer:cp];
+    [kw addSubview:self.dot];
+
+    _t = [NSTimer scheduledTimerWithTimeInterval:2.0 repeats:YES block:^(NSTimer *t) {
+        [self upd];
+    }];
 }
 
 - (void)tapNum:(UIButton *)s {
-    int idx = (int)s.tag;
-    YMState *st = [YMState s];
+    YallaState *st = [YallaState s];
     if (st.isActive) return;
-
-    if (st.selectedIdx == idx) {
-        st.selectedIdx = -1;
-        s.backgroundColor = [UIColor blackColor];
-        s.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-        [s setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        return;
-    }
-
-    // Deselect all
-    for (UIButton *b in self.btns) {
+    int idx = (int)s.tag;
+    for (UIButton *b in self.numBtns) {
         b.backgroundColor = [UIColor blackColor];
         b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     }
-
+    if (st.selectedIdx == idx) {
+        st.selectedIdx = -1;
+        return;
+    }
     st.selectedIdx = idx;
     s.backgroundColor = [UIColor colorWithRed:0 green:0.16 blue:0.04 alpha:0.7];
     s.layer.borderColor = [UIColor colorWithRed:0 green:0.8 blue:0.27 alpha:0.8].CGColor;
     [s setTitleColor:[UIColor colorWithRed:0 green:1 blue:0.33 alpha:0.9] forState:UIControlStateNormal];
-    [self.notify postMic:st.selectedIdx+1];
+    [self.n postMic:st.selectedIdx+1];
     [self upd];
 }
 
 - (void)tapOn {
-    YMState *st = [YMState s];
+    YallaState *st = [YallaState s];
     if (st.selectedIdx < 0) return;
     st.isActive = !st.isActive;
-    [self.onBtn setTitle:st.isActive ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    if (st.isActive) {
-        self.onBtn.backgroundColor = [UIColor colorWithRed:0.6 green:0.1 blue:0.1 alpha:0.9];
-        self.onBtn.layer.borderColor = [UIColor colorWithRed:1 green:0.2 blue:0.2 alpha:0.9].CGColor;
-        [self.onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        [self.notify postMic:st.selectedIdx+1];
-        [self.notify postRun:YES];
-    } else {
-        self.onBtn.backgroundColor = [UIColor colorWithRed:0.1 green:0.6 blue:0.1 alpha:0.9];
-        self.onBtn.layer.borderColor = [UIColor colorWithRed:0.2 green:1 blue:0.2 alpha:0.9].CGColor;
-        [self.onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        [self.notify postMic:st.selectedIdx+1];
-        [self.notify postRun:NO];
-    }
+    [self.onB setTitle:st.isActive ? @"OFF" : @"ON" forState:UIControlStateNormal];
+    self.onB.backgroundColor = st.isActive ? [UIColor colorWithRed:0.6 green:0.1 blue:0.1 alpha:0.9] : [UIColor blackColor];
+    self.onB.layer.borderColor = st.isActive ? [UIColor colorWithRed:1 green:0.2 blue:0.2 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
+    [self.n postMic:st.selectedIdx+1];
+    [self.n postRun:st.isActive];
 }
 
 - (void)tapMs {
-    YMState *st = [YMState s];
+    YallaState *st = [YallaState s];
     st.msIdx = (st.msIdx + 1) % 5;
-    [self.msBtn setTitle:[NSString stringWithFormat:@"ms:%d", [st ms]] forState:UIControlStateNormal];
-    [self.notify postSpeed:[st ms]];
-    if (st.cxxOn) [[YMGlitch g] enable:YES ms:[st ms]];
+    [self.msB setTitle:[NSString stringWithFormat:@"ms:%d", [st ms]] forState:UIControlStateNormal];
     [self upd];
 }
 
 - (void)tapCxx {
-    YMState *st = [YMState s];
+    YallaState *st = [YallaState s];
     st.cxxOn = !st.cxxOn;
-    self.cxxBtn.backgroundColor = st.cxxOn ?
-        [UIColor colorWithRed:0.6 green:0.1 blue:0.6 alpha:0.9] :
-        [UIColor blackColor];
-    self.cxxBtn.layer.borderColor = st.cxxOn ?
-        [UIColor colorWithRed:1 green:0.2 blue:1 alpha:0.9].CGColor :
-        [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-    [[YMGlitch g] enable:st.cxxOn ms:[st ms]];
-    [self.notify postSpeed:[st ms]];
-    [self.notify postCxx:st.cxxOn];
-    [YMTapRegistry shared].cxxCount = st.cxxOn ? [[YMTapRegistry shared] activeCount] : 0;
+    self.cxxB.backgroundColor = st.cxxOn ? [UIColor colorWithRed:0.6 green:0.1 blue:0.6 alpha:0.9] : [UIColor blackColor];
+    self.cxxB.layer.borderColor = st.cxxOn ? [UIColor colorWithRed:1 green:0.2 blue:1 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
     [self upd];
 }
 
 - (void)tapLite {
-    YMState *st = [YMState s];
+    YallaState *st = [YallaState s];
     st.liteOn = !st.liteOn;
-    self.liteBtn.backgroundColor = st.liteOn ?
-        [UIColor colorWithRed:0.1 green:0.1 blue:0.6 alpha:0.9] :
-        [UIColor blackColor];
-    self.liteBtn.layer.borderColor = st.liteOn ?
-        [UIColor colorWithRed:0.2 green:0.2 blue:1 alpha:0.9].CGColor :
-        [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-    [self.notify postLite:st.liteOn];
-    if (st.liteOn) {
-        if (st.selectedIdx >= 0 && st.isActive) {
-            [self.notify postMic:st.selectedIdx+1];
-            [self.notify postRun:YES];
-        }
-    }
+    self.liteB.backgroundColor = st.liteOn ? [UIColor colorWithRed:0.1 green:0.1 blue:0.6 alpha:0.9] : [UIColor blackColor];
+    self.liteB.layer.borderColor = st.liteOn ? [UIColor colorWithRed:0.2 green:0.2 blue:1 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
+    [self upd];
 }
 
-- (void)tapHide {
-    self.rect.hidden = YES;
-    self.circle.hidden = NO;
-}
+- (void)tapHide { self.panel.hidden = YES; self.dot.hidden = NO; }
+- (void)showP { self.panel.hidden = NO; self.dot.hidden = YES; }
 
-- (void)showRect {
-    self.rect.hidden = NO;
-    self.circle.hidden = YES;
-}
-
-- (void)panPanel:(UIPanGestureRecognizer *)g {
+- (void)pan:(UIPanGestureRecognizer *)g {
     UIView *v = g.view;
-    if (g.state == UIGestureRecognizerStateBegan) {
-        objc_setAssociatedObject(g, @selector(panPanel:), [NSValue valueWithCGPoint:v.center], OBJC_ASSOCIATION_RETAIN);
-    } else if (g.state == UIGestureRecognizerStateChanged) {
-        NSValue *val = objc_getAssociatedObject(g, @selector(panPanel:));
+    if (g.state == 1) {
+        objc_setAssociatedObject(g, _cmd, [NSValue valueWithCGPoint:v.center], 1);
+    } else if (g.state == 2) {
+        NSValue *val = objc_getAssociatedObject(g, _cmd);
         if (val) {
-            CGPoint start = [val CGPointValue];
+            CGPoint s = [val CGPointValue];
             CGPoint t = [g translationInView:v.superview];
-            v.center = CGPointMake(start.x + t.x, start.y + t.y);
+            v.center = CGPointMake(s.x + t.x, s.y + t.y);
         }
     }
 }
 
 - (void)upd {
-    YMState *st = [YMState s];
-    YMTapRegistry *reg = [YMTapRegistry shared];
-    int cnt = [reg activeCount];
-    int cc = reg.cxxCount;
-    NSString *s = st.selectedIdx >= 0 ? [NSString stringWithFormat:@"Slot %d", (int)(st.selectedIdx + 1)] : @"None";
-    NSString *lite = st.liteOn ? @"LiTE✓" : @"";
-    NSString *cxx = st.cxxOn ? @"cxx✓" : @"";
-    self.st.text = [NSString stringWithFormat:@"%@ | ms:%d | %@ %@ (%d)", s, [st ms], lite, cxx, cnt];
-
-    // Update button texts with counts
-    [self.liteBtn setTitle:st.liteOn ? [NSString stringWithFormat:@"LiTE %d/%d", cnt, reg.totalEver] : @"LiTE" forState:UIControlStateNormal];
-    [self.cxxBtn setTitle:st.cxxOn ? [NSString stringWithFormat:@"cxx %d", cc] : @"cxx" forState:UIControlStateNormal];
+    YallaState *st = [YallaState s];
+    int cnt = [[TapReg shared] cnt];
+    NSString *slot = st.selectedIdx >= 0 ? [NSString stringWithFormat:@"Slot %d", st.selectedIdx+1] : @"None";
+    self.st.text = [NSString stringWithFormat:@"%@ | ms:%d %@%@ (%d)", slot, [st ms], st.liteOn ? @"LiTE✓" : @"", st.cxxOn ? @" cxx✓" : @"", cnt];
 }
+
 @end
 
-#pragma mark - Init
-
-static YMUI *gUI = nil;
-
-static void ym_createUI(void) {
-    if (gUI) return;
-    if (!ym_keyWindow()) return;
-    gUI = [[YMUI alloc] init];
-}
+static YallaUI *gUI;
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
-        ym_installCrashProtection();
-        ym_startTapObserver();
-        if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYalla]) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                ym_createUI();
-            });
-        }
+        if (![[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYalla]) return;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (gUI || !ym_keyWindow()) return;
+            gUI = [[YallaUI alloc] init];
+        });
     }
 }
