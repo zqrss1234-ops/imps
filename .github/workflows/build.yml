@@ -27,7 +27,7 @@ jobs:
             -dynamiclib \
             -o YallaMaster.dylib \
             -x objective-c++ \
-            Tweak.xm
+            Master/Tweak.xm
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4

@@ -1,5 +1,7 @@
 #import <UIKit/UIKit.h>
+#import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <QuartzCore/QuartzCore.h>
 
 #pragma mark - Crash Prevention (from reference dylib)
 

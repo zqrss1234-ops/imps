@@ -1,4 +1,4 @@
-export TARGET = iphone:clang:latest:14.0
+export TARGET = iphone:14.0:latest
 export ARCHS = arm64 arm64e
 export TARGET_SUBSTRATE = 0
 
