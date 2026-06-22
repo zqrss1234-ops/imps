@@ -14,7 +14,7 @@ static NSString *const kNames[] = {
 static const int kMsVals[] = {50, 25, 10, 5, 1};
 static int kMsValsLen = 5;
 
-// === State ===
+// State
 static int s_instanceId = 0;
 static BOOL s_isMain = NO;
 
@@ -30,7 +30,6 @@ static int s_cxxCount = 0;
 
 // Slave state
 static int s_slvMsIdx = 2;
-static int s_slvMsVal = 10;
 static BOOL s_slvLite = NO;
 static BOOL s_slvCxx = NO;
 static BOOL s_slvSafeCxx = NO;
@@ -47,9 +46,26 @@ static NSMutableArray *s_nums;
 static UIView *s_circle;
 static BOOL s_visible = YES;
 
-// === Helpers ===
+static id s_agent = nil;
+
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
+}
+
+static UIWindow *mainWindow(void) {
+    if (@available(iOS 13, *)) {
+        NSSet *scenes = [UIApplication sharedApplication].connectedScenes;
+        for (UIScene *scene in scenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                UIWindowScene *ws = (UIWindowScene *)scene;
+                for (UIWindow *w in ws.windows) {
+                    if (w.isKeyWindow) return w;
+                }
+                return ws.windows.firstObject;
+            }
+        }
+    }
+    return [UIApplication sharedApplication].keyWindow;
 }
 
 static void postCmd(NSString *cmd) {
@@ -68,7 +84,7 @@ static int getInstanceId(void) {
 
 static UIView *findLiveMikeFace(void) {
     if (s_micFace) return s_micFace;
-    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
+    UIWindow *kw = mainWindow();
     if (!kw) return nil;
     __block UIView *found = nil;
     void (^search)(UIView *) = ^(UIView *v) {
@@ -90,12 +106,9 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
             else if (arg1) ((void (*)(id, SEL, id))[obj methodForSelector:s])(obj, s, arg1);
             else ((void (*)(id, SEL))[obj methodForSelector:s])(obj, s);
         }
-    } @catch (NSException *e) {
-        NSLog(@"callSel exception %@ sel=%@", e.reason, selName);
-    }
+    } @catch (NSException *e) {}
 }
 
-// === Master UI ===
 static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, CGFloat fs) {
     UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
     lb.text = t;
@@ -109,14 +122,39 @@ static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, C
 static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     UIView *v = [[UIView alloc] initWithFrame:CGRectMake(x, y, w, 1)];
     v.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
-    v.userInteractionEnabled = NO;
     return v;
 }
 
-@interface _YM : NSObject @end
-@implementation _YM
+@interface YA : NSObject
+- (void)upd;
+- (void)num:(UIButton *)b;
+- (void)onT;
+- (void)msT;
+- (void)cxxT;
+- (void)liteT;
+- (void)showPanel;
+- (void)hideT;
+- (void)submitPass;
+- (void)buildUI;
+- (void)panPanel:(UIPanGestureRecognizer *)g;
+- (void)panCircle:(UIPanGestureRecognizer *)g;
+- (void)showPass;
+- (void)slvToggleLite:(BOOL)on;
+- (void)slvCxxFreeze;
+- (void)slvCxxSafeFreeze;
+- (void)slvCxxUnfreeze;
+- (void)slvSetMicOn:(int)slot;
+- (void)slvSetMicOff:(int)slot;
+- (void)slvSetSpeed:(int)ms;
+- (void)slvStartTimer:(int)ms;
+- (void)slvRunOn;
+- (void)slvRunOff;
+- (void)slvHandleCmd:(NSString *)cmd;
+@end
 
-+ (void)upd {
+@implementation YA
+
+- (void)upd {
     NSString *s = s_sel >= 0 ? kNames[s_sel] : @"None";
     NSString *status = s_on ? @"ON" : @"OFF";
     NSString *liteSuf = s_lite ? [NSString stringWithFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver] : @"";
@@ -130,7 +168,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     else s_cxxL.text = @"cxx";
 }
 
-+ (void)num:(UIButton *)b {
+- (void)num:(UIButton *)b {
     if (s_on) return;
     int idx = (int)b.tag;
     s_sel = idx;
@@ -138,7 +176,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
-+ (void)onT {
+- (void)onT {
     if (s_sel < 0) return;
     s_on = !s_on;
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
@@ -148,7 +186,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
-+ (void)msT {
+- (void)msT {
     s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
     s_msL.text = [NSString stringWithFormat:@"ms:%d", kMsVals[s_msIdx]];
     postCmd([NSString stringWithFormat:@"speed.%d", kMsVals[s_msIdx]]);
@@ -156,7 +194,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
-+ (void)cxxT {
+- (void)cxxT {
     s_cxx = !s_cxx;
     s_cxxL.textColor = s_cxx ? clr(200,50,200,1) : [UIColor whiteColor];
     s_cxxL.backgroundColor = s_cxx ? clr(100,20,100,0.9) : [UIColor clearColor];
@@ -166,7 +204,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
-+ (void)liteT {
+- (void)liteT {
     s_lite = !s_lite;
     s_liteL.textColor = s_lite ? clr(50,50,255,1) : [UIColor whiteColor];
     s_liteL.backgroundColor = s_lite ? clr(26,26,150,0.9) : [UIColor clearColor];
@@ -175,19 +213,19 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
-+ (void)showPanel {
+- (void)showPanel {
     s_panel.hidden = NO;
     s_circle.hidden = YES;
     s_visible = YES;
 }
 
-+ (void)hideT {
+- (void)hideT {
     s_visible = NO;
     s_panel.hidden = YES;
     s_circle.hidden = NO;
 }
 
-+ (void)submitPass {
+- (void)submitPass {
     NSString *code = s_passField.text ?: @"";
     if (![code isEqualToString:@"515"]) {
         UIColor *orig = s_passField.backgroundColor;
@@ -205,17 +243,8 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self buildUI];
 }
 
-static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        s_slaveCount++;
-        if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
-        if (s_cxx) s_cxxCount = s_slaveCount;
-        [_YM upd];
-    });
-}
-
-+ (void)buildUI {
-    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+- (void)buildUI {
+    UIWindow *kw = mainWindow();
     if (!kw) return;
     UIView *cv = kw.rootViewController.view;
     if (!cv) return;
@@ -234,7 +263,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_panel.clipsToBounds = YES;
     s_panel.tag = 999;
 
-    // Names row
+    // Names
     NSMutableAttributedString *as = [[NSMutableAttributedString alloc] init];
     for (int i = 0; i < kNamesCount; i++) {
         if (i > 0) [as appendAttributedString:[[NSAttributedString alloc] initWithString:@"  "]];
@@ -250,9 +279,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     nl.textAlignment = NSTextAlignmentCenter;
     nl.adjustsFontSizeToFitWidth = YES;
     nl.minimumScaleFactor = 0.4;
-    nl.userInteractionEnabled = NO;
     [s_panel addSubview:nl];
-
     [s_panel addSubview:mkSep(0, 32, PW)];
 
     // Numbers 1-10
@@ -279,7 +306,6 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
         [s_panel addSubview:b];
         [s_nums addObject:b];
     }
-
     [s_panel addSubview:mkSep(0, 74, PW)];
 
     // Controls
@@ -291,12 +317,12 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     s_onBtn.frame = CGRectMake(cStartX, 82, cw, 30);
     [s_onBtn setTitle:@"ON" forState:UIControlStateNormal];
-    [s_onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     s_onBtn.backgroundColor = clr(0,100,0,0.9);
     s_onBtn.layer.cornerRadius = 8;
     s_onBtn.layer.borderWidth = 1.5;
     s_onBtn.layer.borderColor = clr(0,255,0,0.9).CGColor;
     s_onBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [s_onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     [s_onBtn addTarget:self action:@selector(onT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:s_onBtn];
 
@@ -307,7 +333,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_msL.layer.cornerRadius = 8;
     [s_panel addSubview:s_msL];
     UIButton *msBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    msBtn.frame = CGRectMake(msX, 82, cw, 30);
+    msBtn.frame = msL.frame;
     msBtn.backgroundColor = [UIColor clearColor];
     [msBtn addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:msBtn];
@@ -319,7 +345,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_cxxL.layer.cornerRadius = 8;
     [s_panel addSubview:s_cxxL];
     UIButton *cxxBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    cxxBtn.frame = CGRectMake(cxxX, 82, cw, 30);
+    cxxBtn.frame = s_cxxL.frame;
     cxxBtn.backgroundColor = [UIColor clearColor];
     [cxxBtn addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:cxxBtn];
@@ -331,7 +357,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_liteL.layer.cornerRadius = 8;
     [s_panel addSubview:s_liteL];
     UIButton *liteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    liteBtn.frame = CGRectMake(liteX, 82, cw, 30);
+    liteBtn.frame = s_liteL.frame;
     liteBtn.backgroundColor = [UIColor clearColor];
     [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:liteBtn];
@@ -357,7 +383,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     s_st.text = @"None | OFF | Mic 0 | 50ms";
     [s_panel addSubview:s_st];
 
-    // Info text
+    // Info
     UILabel *infoL = [[UILabel alloc] initWithFrame:CGRectMake(8, 136, PW - 16, 16)];
     infoL.textColor = [UIColor whiteColor];
     infoL.font = [UIFont systemFontOfSize:10];
@@ -387,12 +413,10 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     cl.textColor = [UIColor colorWithWhite:1 alpha:0.7];
     cl.font = [UIFont boldSystemFontOfSize:13];
     cl.textAlignment = NSTextAlignmentCenter;
-    cl.userInteractionEnabled = NO;
     [s_circle addSubview:cl];
 
     UITapGestureRecognizer *ctap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showPanel)];
     [s_circle addGestureRecognizer:ctap];
-
     UIPanGestureRecognizer *cpan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panCircle:)];
     [s_circle addGestureRecognizer:cpan];
 
@@ -408,7 +432,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     [self upd];
 }
 
-+ (void)panPanel:(UIPanGestureRecognizer *)g {
+- (void)panPanel:(UIPanGestureRecognizer *)g {
     static CGPoint startCenter;
     UIView *v = g.view;
     if (g.state == UIGestureRecognizerStateBegan) startCenter = v.center;
@@ -418,7 +442,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     }
 }
 
-+ (void)panCircle:(UIPanGestureRecognizer *)g {
+- (void)panCircle:(UIPanGestureRecognizer *)g {
     static CGPoint startCenter;
     UIView *v = g.view;
     if (g.state == UIGestureRecognizerStateBegan) startCenter = v.center;
@@ -428,17 +452,17 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     }
 }
 
-+ (void)showPass {
-    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+- (void)showPass {
+    UIWindow *kw = mainWindow();
     if (!kw) return;
     UIView *cv = kw.rootViewController.view;
     if (!cv) return;
 
-    s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, [UIScreen mainScreen].bounds.size.height)];
+    s_passView = [[UIView alloc] initWithFrame:kw.bounds];
     s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
 
     UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 150)];
-    box.center = CGPointMake(s_passView.center.x, s_passView.center.y - 60);
+    box.center = CGPointMake(kw.center.x, kw.center.y - 60);
     box.backgroundColor = [UIColor blackColor];
     box.layer.cornerRadius = 16;
     box.layer.borderWidth = 2;
@@ -479,8 +503,8 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     [s_passField becomeFirstResponder];
 }
 
-// === Slave handlers ===
-+ (void)slvToggleLite:(BOOL)on {
+// === Slave ===
+- (void)slvToggleLite:(BOOL)on {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIView *face = findLiveMikeFace();
         if (!face) return;
@@ -492,7 +516,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvCxxFreeze {
+- (void)slvCxxFreeze {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -507,7 +531,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvCxxSafeFreeze {
+- (void)slvCxxSafeFreeze {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -519,7 +543,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvCxxUnfreeze {
+- (void)slvCxxUnfreeze {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -535,7 +559,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvSetMicOn:(int)slot {
+- (void)slvSetMicOn:(int)slot {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -548,7 +572,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvSetMicOff:(int)slot {
+- (void)slvSetMicOff:(int)slot {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -558,8 +582,8 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvSetSpeed:(int)ms {
-    s_slvMsVal = ms;
+- (void)slvSetSpeed:(int)ms {
+    s_slvMsIdx = 2;
     for (int i = 0; i < 5; i++) {
         if (kMsVals[i] == ms) { s_slvMsIdx = i; break; }
     }
@@ -573,7 +597,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvStartTimer:(int)ms {
+- (void)slvStartTimer:(int)ms {
     if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
     s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     if (!s_timer) return;
@@ -586,7 +610,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     dispatch_resume(s_timer);
 }
 
-+ (void)slvRunOn {
+- (void)slvRunOn {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -600,7 +624,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvRunOff {
+- (void)slvRunOff {
     dispatch_async(dispatch_get_main_queue(), ^{
         id face = findLiveMikeFace();
         if (!face) return;
@@ -610,7 +634,7 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
     });
 }
 
-+ (void)slvHandleCmd:(NSString *)cmd {
+- (void)slvHandleCmd:(NSString *)cmd {
     if ([cmd isEqualToString:@"lite.on"]) { s_slvLite = YES; [self slvToggleLite:YES]; }
     else if ([cmd isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvToggleLite:NO]; }
     else if ([cmd isEqualToString:@"run.on"]) { [self slvRunOn]; }
@@ -623,23 +647,31 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
         [self slvStartTimer:ms];
     } else if ([cmd isEqualToString:@"P.M.S"]) {
         s_slvMsIdx = s_slvMsIdx >= 4 ? 0 : s_slvMsIdx + 1;
-        s_slvMsVal = kMsVals[s_slvMsIdx];
-        [self slvSetSpeed:s_slvMsVal];
-        [self slvStartTimer:s_slvMsVal];
+        [self slvSetSpeed:kMsVals[s_slvMsIdx]];
+        [self slvStartTimer:kMsVals[s_slvMsIdx]];
     }
 }
+
 @end
 
-// === Notification handler ===
+// === C callbacks ===
 static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
     NSString *name = (__bridge NSString *)n;
     if ([name hasPrefix:kNotifyPrefix]) {
         NSString *cmd = [name substringFromIndex:kNotifyPrefix.length];
-        dispatch_async(dispatch_get_main_queue(), ^{ [_YM slvHandleCmd:cmd]; });
+        dispatch_async(dispatch_get_main_queue(), ^{ [s_agent slvHandleCmd:cmd]; });
     }
 }
 
-// === Crash handler ===
+static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
+    dispatch_async(dispatch_get_main_queue(), ^{
+        s_slaveCount++;
+        if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
+        if (s_cxx) s_cxxCount = s_slaveCount;
+        [s_agent upd];
+    });
+}
+
 static void ysExceptionHandler(NSException *e) {
     NSLog(@"[YallaAgent] %@: %@", e.name, e.reason);
 }
@@ -659,13 +691,29 @@ __attribute__((constructor)) static void init() {
             NULL, NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
+        s_agent = [[YA alloc] init];
+
         if (s_isMain) {
             dispatch_async(dispatch_get_main_queue(), ^{
+                UIWindow *kw = mainWindow();
+                if (!kw) {
+                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                        UIWindow *kw2 = mainWindow();
+                        if (kw2) {
 #ifdef YM_DIRECT
-                [_YM buildUI];
+                            [s_agent buildUI];
 #else
-                [_YM showPass];
+                            [s_agent showPass];
 #endif
+                        }
+                    });
+                } else {
+#ifdef YM_DIRECT
+                    [s_agent buildUI];
+#else
+                    [s_agent showPass];
+#endif
+                }
             });
         }
 

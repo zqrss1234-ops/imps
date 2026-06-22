@@ -21,6 +21,7 @@ jobs:
             -framework UIKit \
             -framework Foundation \
             -framework CoreGraphics \
+            -framework QuartzCore \
             -dynamiclib \
             -o YallaAgent.dylib \
             -x objective-c++ \
@@ -36,6 +37,7 @@ jobs:
             -framework UIKit \
             -framework Foundation \
             -framework CoreGraphics \
+            -framework QuartzCore \
             -dynamiclib \
             -DYM_DIRECT \
             -o YallaAgent_DIRECT.dylib \
