@@ -1,0 +1,9 @@
+Package: com.yalla.agenttweak
+Name: Yalla Agent
+Version: 1.0.0
+Architecture: iphoneos-arm
+Description: Yalla Lite multi-account agent - Master UI + Slave executor
+Maintainer: Abdulilah
+Author: Abdulilah
+Section: Tweaks
+Depends: firmware (>= 14.0)
