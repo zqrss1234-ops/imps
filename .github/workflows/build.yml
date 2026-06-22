@@ -60,23 +60,25 @@ jobs:
             build_direct_status.txt
           if-no-files-found: warn
 
-      - name: Sign normal
-        if: hashFiles('YallaMaster.dylib') != ''
+      - name: Sign dylibs
+        if: always()
         run: |
           curl -sL -o /tmp/ldid https://github.com/opa334/ldid/releases/download/v2.1.2-procursus5/ldid_macosx_arm64
           chmod +x /tmp/ldid
-          /tmp/ldid -Sentitlements.plist YallaMaster.dylib
-
-      - name: Sign DIRECT
-        if: hashFiles('YallaMaster_DIRECT.dylib') != ''
-        run: |
-          /tmp/ldid -Sentitlements.plist YallaMaster_DIRECT.dylib
+          for f in YallaMaster.dylib YallaMaster_DIRECT.dylib; do
+            if [ -f "$f" ]; then
+              /tmp/ldid -Sentitlements.plist "$f"
+              mkdir -p output
+              cp "$f" output/
+            fi
+          done
 
       - name: Upload dylibs
-        if: hashFiles('YallaMaster.dylib') != '' || hashFiles('YallaMaster_DIRECT.dylib') != ''
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: YallaMaster-dylibs
-          path: |
-            YallaMaster.dylib
-            YallaMaster_DIRECT.dylib
+          path: output/
+          if-no-files-found: warn
+
+
