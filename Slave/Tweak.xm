@@ -10,6 +10,10 @@ static BOOL s_cxxOn = NO;
 static int s_instanceId = 0;
 static __weak UIView *s_micFace = nil;
 
+static void ysExceptionHandler(NSException *e) {
+    NSLog(@"[YallaSlave] %@: %@", e.name, e.reason);
+}
+
 static int getInstanceId(void) {
     NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
     NSString *prefix = @"com.yalla.yallalite";
@@ -143,9 +147,7 @@ __attribute__((constructor)) static void init() {
         if (![bid isEqualToString:prefix] && ![bid hasPrefix:prefix]) return;
         s_instanceId = getInstanceId();
 
-        NSSetUncaughtExceptionHandler(^(NSException *e) {
-            NSLog(@"[YallaSlave] %@: %@", e.name, e.reason);
-        });
+        NSSetUncaughtExceptionHandler(&ysExceptionHandler);
 
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), NULL, onNotify,
