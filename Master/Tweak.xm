@@ -1,436 +1,245 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
-#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
 #define kYallaBundle @"com.yalla.yallalite"
 
-static int const kMsVals[5] = {50, 25, 10, 5, 1};
-static NSString *const kNameList[8] = {
-    @"Abdulilah", @"Lahlouh", @"Charo", @"Abu Mutab",
-    @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas"
-};
+static int kMsVals[] = {50, 25, 10, 5, 1};
+static int s_sel = -1;
+static int s_msIdx = 2;
+static BOOL s_on = NO;
+static BOOL s_cxx = NO;
+static BOOL s_lite = NO;
+static UIView *s_panel;
+static UIView *s_passView;
+static UITextField *s_passField;
+static UILabel *s_st, *s_msL, *s_cxxL, *s_liteL;
+static NSMutableArray *s_nums;
+static BOOL s_visible = YES;
 
-@interface YallaState : NSObject
-@property (nonatomic, assign) int selectedIdx;
-@property (nonatomic, assign) int msIdx;
-@property (nonatomic, assign) BOOL isActive;
-@property (nonatomic, assign) BOOL cxxOn;
-@property (nonatomic, assign) BOOL liteOn;
-+ (instancetype)s;
-- (int)ms;
-@end
-@implementation YallaState
-+ (instancetype)s {
-    static YallaState *x;
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{ x = [[self alloc] init]; });
-    return x;
+static UILabel *makeLabel(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t) {
+    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
+    lb.text = t;
+    lb.textColor = [UIColor whiteColor];
+    lb.font = [UIFont boldSystemFontOfSize:11];
+    lb.textAlignment = NSTextAlignmentCenter;
+    lb.userInteractionEnabled = NO;
+    return lb;
 }
-- (instancetype)init {
-    if ((self = [super init])) {
-        _selectedIdx = -1;
-        _msIdx = 2;
+
+@interface _YM : NSObject @end
+@implementation _YM
++ (void)num:(UIButton *)b {
+    if (s_on) return;
+    int idx = (int)b.tag;
+    s_sel = idx;
+    for (UIButton *nb in s_nums) nb.selected = (nb.tag == idx);
+    NSString *cmd = [NSString stringWithFormat:@"com.yalla.liteagent.cmd.select.%d", idx];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
+}
++ (void)onT {
+    s_on = !s_on;
+    for (long i = 1; i <= 10; i++) {
+        NSString *cmd = s_on
+            ? [NSString stringWithFormat:@"com.yalla.liteagent.cmd.micon.%ld", i]
+            : [NSString stringWithFormat:@"com.yalla.liteagent.cmd.micoff.%ld", i];
+        CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
     }
-    return self;
 }
-- (int)ms { return kMsVals[_msIdx]; }
-@end
-
-@interface TapReg : NSObject
-@property (nonatomic, strong) NSMutableDictionary *taps;
-@property (nonatomic, strong) NSLock *lock;
-+ (instancetype)shared;
-- (int)cnt;
-@end
-@implementation TapReg
-+ (instancetype)shared {
-    static TapReg *x;
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{ x = [[self alloc] init]; });
-    return x;
++ (void)msT {
+    s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
+    s_msL.text = [NSString stringWithFormat:@"%dms", kMsVals[s_msIdx]];
+    NSString *cmd = [NSString stringWithFormat:@"com.yalla.liteagent.cmd.ms.%d", kMsVals[s_msIdx]];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge CFStringRef)cmd, NULL, NULL, YES);
 }
-- (instancetype)init {
-    if ((self = [super init])) {
-        _taps = [NSMutableDictionary dictionary];
-        _lock = [[NSLock alloc] init];
-    }
-    return self;
++ (void)cxxT {
+    s_cxx = !s_cxx;
+    s_cxxL.textColor = s_cxx ? [UIColor yellowColor] : [UIColor whiteColor];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.yalla.liteagent.cmd.cxx"), NULL, NULL, YES);
 }
-- (int)cnt {
-    [_lock lock];
-    int c = (int)_taps.count;
-    [_lock unlock];
-    return c;
++ (void)liteT {
+    s_lite = !s_lite;
+    s_liteL.textColor = s_lite ? [UIColor yellowColor] : [UIColor whiteColor];
+    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), CFSTR("com.yalla.liteagent.cmd.lite"), NULL, NULL, YES);
 }
-- (void)recv:(NSString *)u {
-    [_lock lock];
-    _taps[u] = @([[NSDate date] timeIntervalSince1970]);
-    [_lock unlock];
++ (void)hideT {
+    s_visible = !s_visible;
+    s_panel.hidden = !s_visible;
 }
-- (void)prune {
-    [_lock lock];
-    double now = [[NSDate date] timeIntervalSince1970];
-    NSMutableArray *stale = [NSMutableArray array];
-    [_taps enumerateKeysAndObjectsUsingBlock:^(id k, NSNumber *v, BOOL *s) {
-        if (now - v.doubleValue > 12) [stale addObject:k];
-    }];
-    [_taps removeObjectsForKeys:stale];
-    [_lock unlock];
-}
-@end
-
-static const char *kTapPrefix = "com.yalla.liteagent.cmd.";
-
-@interface Notifier : NSObject
-- (void)post:(NSString *)n;
-- (void)postMic:(long)s;
-- (void)postRun:(BOOL)o;
-@end
-@implementation Notifier
-- (void)post:(NSString *)name {
-    NSString *full = [NSString stringWithFormat:@"%s%@", kTapPrefix, name];
-    CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(),
-                                          (__bridge CFStringRef)full, NULL, NULL, true);
-}
-- (void)postMic:(long)s { [self post:[NSString stringWithFormat:@"mic.%ld", s]]; }
-- (void)postRun:(BOOL)o { [self post:o ? @"run.on" : @"run.off"]; }
-@end
-
-static UIView *ym_container(void) {
-    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
-    if (!kw && @available(iOS 13, *)) {
-        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-            if (![s isKindOfClass:[UIWindowScene class]]) continue;
-            for (UIWindow *w in [(UIWindowScene *)s windows]) {
-                if (w.isKeyWindow) { kw = w; break; }
-            }
-            if (kw) break;
-        }
-    }
-    UIViewController *vc = kw.rootViewController;
-    while (vc.presentedViewController) vc = vc.presentedViewController;
-    return vc.view;
-}
-
-@interface YallaUI : NSObject
-@property (nonatomic, strong) UIView *panel;
-@property (nonatomic, strong) UIView *dot;
-@property (nonatomic, strong) NSMutableArray *numBtns;
-@property (nonatomic, strong) UIButton *onB, *msB, *cxxB, *liteB, *hideB;
-@property (nonatomic, strong) UILabel *st;
-@property (nonatomic, strong) Notifier *n;
-- (void)build;
-@end
-
-@implementation YallaUI {
-    UIView *_pv;
-}
-
-- (instancetype)init {
-    if ((self = [super init])) {
-        _n = [[Notifier alloc] init];
-        _numBtns = [NSMutableArray array];
-#ifndef YM_DIRECT
-        [self showPass];
-#else
-        dispatch_async(dispatch_get_main_queue(), ^{ [self build]; });
-#endif
-    }
-    return self;
-}
-
-- (void)showPass {
-    UIWindow *kw = [UIApplication sharedApplication].keyWindow;
-    if (!kw && @available(iOS 13, *)) {
-        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-            if (![s isKindOfClass:[UIWindowScene class]]) continue;
-            for (UIWindow *w in [(UIWindowScene *)s windows]) {
-                if (w.isKeyWindow) { kw = w; break; }
-            }
-            if (kw) break;
-        }
-    }
-    if (!kw) return;
-    _pv = [[UIView alloc] initWithFrame:kw.bounds];
-    _pv.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
-    _pv.userInteractionEnabled = YES;
-
-    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 160)];
-    box.center = CGPointMake(kw.bounds.size.width/2, kw.bounds.size.height/2);
-    box.backgroundColor = [UIColor blackColor];
-    box.layer.cornerRadius = 16;
-
-    UILabel *tt = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 220, 30)];
-    tt.text = @"Abdulilah";
-    tt.textColor = [UIColor whiteColor];
-    tt.font = [UIFont boldSystemFontOfSize:14];
-    tt.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:tt];
-
-    UITextField *tf = [[UITextField alloc] initWithFrame:CGRectMake(30, 54, 160, 34)];
-    tf.placeholder = @"515";
-    tf.textAlignment = NSTextAlignmentCenter;
-    tf.keyboardType = UIKeyboardTypeNumberPad;
-    tf.secureTextEntry = YES;
-    tf.textColor = [UIColor whiteColor];
-    tf.font = [UIFont boldSystemFontOfSize:18];
-    tf.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.9];
-    tf.layer.cornerRadius = 8;
-    [box addSubview:tf];
-
-    UIButton *un = [UIButton buttonWithType:UIButtonTypeCustom];
-    un.frame = CGRectMake(30, 102, 160, 36);
-    [un setTitle:@"Unlock" forState:UIControlStateNormal];
-    [un setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    un.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.5 alpha:0.9];
-    un.layer.cornerRadius = 8;
-    un.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    [un addTarget:self action:@selector(submit:) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:un];
-
-    [_pv addSubview:box];
-    [kw addSubview:_pv];
-    [kw bringSubviewToFront:_pv];
-    [tf becomeFirstResponder];
-}
-
-- (void)submit:(UIButton *)s {
-    UITextField *tf = (UITextField *)s.superview.subviews[1];
-    NSString *code = tf.text ?: @"";
++ (void)submitPass {
+    NSString *code = s_passField.text ?: @"";
     if (![code isEqualToString:@"515"]) {
-        CABasicAnimation *sh = [CABasicAnimation animationWithKeyPath:@"position"];
-        sh.duration = 0.06;
-        sh.repeatCount = 3;
-        sh.autoreverses = YES;
-        sh.fromValue = [NSValue valueWithCGPoint:CGPointMake(s.superview.center.x - 8, s.superview.center.y)];
-        sh.toValue = [NSValue valueWithCGPoint:CGPointMake(s.superview.center.x + 8, s.superview.center.y)];
-        [s.superview.layer addAnimation:sh forKey:@"sh"];
-        tf.text = @"";
-        return;
-    }
-    [tf resignFirstResponder];
-    [_pv removeFromSuperview];
-    _pv = nil;
-    [self build];
-}
-
-- (void)build {
-    UIView *cv = ym_container();
-    if (!cv) {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            [self build];
+        UIColor *orig = s_passField.backgroundColor;
+        s_passField.backgroundColor = [UIColor colorWithRed:1 green:0.2 blue:0.2 alpha:0.5];
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            s_passField.backgroundColor = orig;
         });
+        s_passField.text = @"";
         return;
     }
-    CGFloat rw = MIN(cv.bounds.size.width - 20, 350);
+    [s_passField resignFirstResponder];
+    [s_passView removeFromSuperview];
+    s_passView = nil;
+    [self buildUI];
+}
++ (void)buildUI {
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (!kw) return;
+    UIView *cv = kw.rootViewController.view;
+    if (!cv) return;
 
-    self.panel = [[UIView alloc] initWithFrame:CGRectMake((cv.bounds.size.width - rw)/2, (cv.bounds.size.height - 142)/2 - 40, rw, 142)];
-    self.panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
-    self.panel.layer.cornerRadius = 18;
-    self.panel.layer.borderWidth = 2;
-    self.panel.layer.borderColor = [UIColor blackColor].CGColor;
-    self.panel.clipsToBounds = YES;
+    s_panel = [[UIView alloc] initWithFrame:CGRectMake(20, 140, 320, 200)];
+    s_panel.backgroundColor = [UIColor colorWithWhite:0.08 alpha:0.92];
+    s_panel.layer.cornerRadius = 18;
+    s_panel.layer.borderWidth = 2;
+    s_panel.layer.borderColor = [UIColor blackColor].CGColor;
 
-    UIView *nr = [[UIView alloc] initWithFrame:CGRectMake(0, 0, rw, 38)];
-    for (int i = 0; i < 8; i++) {
-        int col = i % 4, row = i / 4;
-        UILabel *l = [[UILabel alloc] initWithFrame:CGRectMake(10 + col * ((rw-40)/4 + 5), 6 + row * 16, (rw-40)/4, 14)];
-        l.text = kNameList[i];
-        l.textColor = [UIColor colorWithWhite:0.9 alpha:1];
-        l.font = [UIFont boldSystemFontOfSize:9];
-        l.adjustsFontSizeToFitWidth = YES;
-        l.minimumScaleFactor = 0.6;
-        [nr addSubview:l];
-    }
-    [self.panel addSubview:nr];
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, 120, 18)];
+    title.text = @"YallaMaster";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont boldSystemFontOfSize:13];
+    [s_panel addSubview:title];
 
-    UIView *s1 = [[UIView alloc] initWithFrame:CGRectMake(0, 38, rw, 1)];
-    s1.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.5];
-    [self.panel addSubview:s1];
+    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(130, 8, 180, 18)];
+    sub.textColor = [UIColor lightGrayColor];
+    sub.font = [UIFont systemFontOfSize:10];
+    sub.textAlignment = NSTextAlignmentRight;
+    [s_panel addSubview:sub];
 
-    UIView *numRow = [[UIView alloc] initWithFrame:CGRectMake(0, 42, rw, 40)];
-    CGFloat bw = 26, gap = 4;
-    CGFloat sx = (rw - (bw * 10 + gap * 9)) / 2;
-    for (int i = 0; i < 10; i++) {
+    s_nums = [NSMutableArray array];
+    for (int i = 1; i <= 10; i++) {
+        int col = (i - 1) % 5;
+        int row = (i - 1) / 5;
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        b.frame = CGRectMake(sx + i * (bw + gap), 5, bw, 30);
-        b.layer.cornerRadius = 7;
-        b.backgroundColor = [UIColor blackColor];
-        b.layer.borderWidth = 1.5;
-        b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-        b.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-        [b setTitle:@(i+1).stringValue forState:UIControlStateNormal];
+        b.frame = CGRectMake(10 + col * 60, 30 + row * 30, 50, 24);
+        [b setTitle:[@(i) stringValue] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        b.tag = i;
-        [b addTarget:self action:@selector(tapNum:) forControlEvents:UIControlEventTouchUpInside];
-        [numRow addSubview:b];
-        [self.numBtns addObject:b];
-    }
-    [self.panel addSubview:numRow];
-
-    UIView *s2 = [[UIView alloc] initWithFrame:CGRectMake(0, 82, rw, 1.5)];
-    s2.backgroundColor = [UIColor colorWithRed:0.1 green:0.1 blue:0.1 alpha:0.5];
-    [self.panel addSubview:s2];
-
-    NSArray *cids = @[@"hide", @"lite", @"cxx", @"ms", @"on"];
-    CGFloat cw = (rw - 24) / 5;
-    for (int i = 0; i < 5; i++) {
-        NSString *cid = cids[i];
-        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        b.frame = CGRectMake(10 + (4 - i) * (cw + 2), 87, cw, 30);
-        b.layer.cornerRadius = 8;
-        b.titleLabel.font = [UIFont boldSystemFontOfSize:10];
+        [b setTitleColor:[UIColor blackColor] forState:UIControlStateSelected];
+        b.backgroundColor = [UIColor darkGrayColor];
+        b.layer.cornerRadius = 6;
         b.layer.borderWidth = 1;
-        b.backgroundColor = [UIColor blackColor];
-        b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-        [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-        if ([cid isEqualToString:@"on"]) {
-            [b setTitle:@"ON" forState:UIControlStateNormal];
-            [b addTarget:self action:@selector(tapOn) forControlEvents:UIControlEventTouchUpInside];
-            self.onB = b;
-        } else if ([cid isEqualToString:@"ms"]) {
-            [b setTitle:@"ms:10" forState:UIControlStateNormal];
-            [b addTarget:self action:@selector(tapMs) forControlEvents:UIControlEventTouchUpInside];
-            self.msB = b;
-        } else if ([cid isEqualToString:@"cxx"]) {
-            [b setTitle:@"cxx" forState:UIControlStateNormal];
-            [b addTarget:self action:@selector(tapCxx) forControlEvents:UIControlEventTouchUpInside];
-            self.cxxB = b;
-        } else if ([cid isEqualToString:@"lite"]) {
-            [b setTitle:@"LiTE" forState:UIControlStateNormal];
-            [b addTarget:self action:@selector(tapLite) forControlEvents:UIControlEventTouchUpInside];
-            self.liteB = b;
-        } else if ([cid isEqualToString:@"hide"]) {
-            [b setTitle:@"Hide" forState:UIControlStateNormal];
-            [b addTarget:self action:@selector(tapHide) forControlEvents:UIControlEventTouchUpInside];
-            self.hideB = b;
-        }
-        [self.panel addSubview:b];
+        b.layer.borderColor = [UIColor grayColor].CGColor;
+        b.titleLabel.font = [UIFont boldSystemFontOfSize:12];
+        b.tag = i;
+        [b addTarget:self action:@selector(num:) forControlEvents:UIControlEventTouchUpInside];
+        [s_panel addSubview:b];
+        [s_nums addObject:b];
     }
 
-    self.st = [[UILabel alloc] initWithFrame:CGRectMake(0, 120, rw, 16)];
-    self.st.textAlignment = NSTextAlignmentCenter;
-    self.st.textColor = [UIColor whiteColor];
-    self.st.font = [UIFont systemFontOfSize:9];
-    [self upd];
-    [self.panel addSubview:self.st];
+    int y = 94;
+    int w = 52;
+    UIButton *onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    onBtn.frame = CGRectMake(10, y, w, 28);
+    [onBtn setTitle:@"ON" forState:UIControlStateNormal];
+    [onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    onBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.5 blue:0.2 alpha:1];
+    onBtn.layer.cornerRadius = 8;
+    [onBtn addTarget:self action:@selector(onT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:onBtn];
 
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)];
-    pan.cancelsTouchesInView = NO;
-    [self.panel addGestureRecognizer:pan];
+    s_msL = makeLabel(72, y, w, 28, @"10ms");
+    s_msL.tag = 101;
+    [s_panel addSubview:s_msL];
+    UIButton *msBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    msBtn.frame = CGRectMake(72, y, w, 28);
+    msBtn.backgroundColor = [UIColor clearColor];
+    [msBtn addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:msBtn];
 
-    self.dot = [[UIView alloc] initWithFrame:CGRectMake(cv.bounds.size.width - 80, cv.bounds.size.height/2 - 25, 48, 48)];
-    self.dot.backgroundColor = [UIColor blackColor];
-    self.dot.layer.cornerRadius = 24;
-    self.dot.layer.borderWidth = 2.5;
-    self.dot.layer.borderColor = [UIColor blackColor].CGColor;
-    self.dot.hidden = YES;
-    self.dot.userInteractionEnabled = YES;
-    UILabel *cl = [[UILabel alloc] initWithFrame:self.dot.bounds];
-    cl.text = @"515";
-    cl.textColor = [UIColor colorWithWhite:1 alpha:0.7];
-    cl.font = [UIFont boldSystemFontOfSize:13];
-    cl.textAlignment = NSTextAlignmentCenter;
-    [self.dot addSubview:cl];
-    [self.dot addGestureRecognizer:[[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showP)]];
+    s_cxxL = makeLabel(134, y, w, 28, @"cxx");
+    s_cxxL.tag = 102;
+    [s_panel addSubview:s_cxxL];
+    UIButton *cxxBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    cxxBtn.frame = CGRectMake(134, y, w, 28);
+    cxxBtn.backgroundColor = [UIColor clearColor];
+    [cxxBtn addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:cxxBtn];
 
-    [cv addSubview:self.panel];
-    [cv addSubview:self.dot];
+    s_liteL = makeLabel(196, y, w, 28, @"LiTE");
+    s_liteL.tag = 103;
+    [s_panel addSubview:s_liteL];
+    UIButton *liteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    liteBtn.frame = CGRectMake(196, y, w, 28);
+    liteBtn.backgroundColor = [UIColor clearColor];
+    [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:liteBtn];
+
+    UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    hideBtn.frame = CGRectMake(258, y, w, 28);
+    [hideBtn setTitle:@"Hide" forState:UIControlStateNormal];
+    [hideBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    hideBtn.backgroundColor = [UIColor darkGrayColor];
+    hideBtn.layer.cornerRadius = 8;
+    [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:hideBtn];
+
+    s_st = [[UILabel alloc] initWithFrame:CGRectMake(10, 130, 300, 18)];
+    s_st.textColor = [UIColor lightGrayColor];
+    s_st.font = [UIFont systemFontOfSize:9];
+    s_st.textAlignment = NSTextAlignmentRight;
+    [s_panel addSubview:s_st];
+
+    [cv addSubview:s_panel];
 }
++ (void)showPass {
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (!kw) return;
+    UIView *cv = kw.rootViewController.view;
+    if (!cv) return;
 
-- (void)tapNum:(UIButton *)s {
-    YallaState *st = [YallaState s];
-    if (st.isActive) return;
-    int idx = (int)s.tag;
-    for (UIButton *b in self.numBtns) {
-        b.backgroundColor = [UIColor blackColor];
-        b.layer.borderColor = [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-        [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    }
-    if (st.selectedIdx == idx) {
-        st.selectedIdx = -1;
-        [self upd];
-        return;
-    }
-    st.selectedIdx = idx;
-    s.backgroundColor = [UIColor colorWithRed:0 green:0.16 blue:0.04 alpha:0.7];
-    s.layer.borderColor = [UIColor colorWithRed:0 green:0.8 blue:0.27 alpha:0.8].CGColor;
-    [s setTitleColor:[UIColor colorWithRed:0 green:1 blue:0.33 alpha:0.9] forState:UIControlStateNormal];
-    [self.n postMic:st.selectedIdx + 1];
-    [self upd];
+    s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, [UIScreen mainScreen].bounds.size.height)];
+    s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+    s_passView.userInteractionEnabled = YES;
+
+    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 200, 130)];
+    box.center = CGPointMake(s_passView.center.x, s_passView.center.y - 60);
+    box.backgroundColor = [UIColor colorWithWhite:0.12 alpha:0.95];
+    box.layer.cornerRadius = 16;
+    box.layer.borderWidth = 2;
+    box.layer.borderColor = [UIColor blackColor].CGColor;
+
+    UILabel *pl = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 200, 20)];
+    pl.text = @"Enter Passcode";
+    pl.textColor = [UIColor whiteColor];
+    pl.font = [UIFont boldSystemFontOfSize:14];
+    pl.textAlignment = NSTextAlignmentCenter;
+    [box addSubview:pl];
+
+    s_passField = [[UITextField alloc] initWithFrame:CGRectMake(30, 44, 140, 30)];
+    s_passField.placeholder = @"***";
+    s_passField.textAlignment = NSTextAlignmentCenter;
+    s_passField.keyboardType = UIKeyboardTypeNumberPad;
+    s_passField.secureTextEntry = YES;
+    s_passField.textColor = [UIColor whiteColor];
+    s_passField.backgroundColor = [UIColor colorWithWhite:0.2 alpha:1];
+    s_passField.layer.cornerRadius = 8;
+    [box addSubview:s_passField];
+
+    UIButton *psBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    psBtn.frame = CGRectMake(40, 84, 120, 28);
+    [psBtn setTitle:@"Submit" forState:UIControlStateNormal];
+    [psBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    psBtn.backgroundColor = [UIColor colorWithRed:0.2 green:0.4 blue:0.7 alpha:1];
+    psBtn.layer.cornerRadius = 8;
+    [psBtn addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:psBtn];
+
+    [s_passView addSubview:box];
+    [cv addSubview:s_passView];
+    [s_passField becomeFirstResponder];
 }
-
-- (void)tapOn {
-    YallaState *st = [YallaState s];
-    if (st.selectedIdx < 0) return;
-    st.isActive = !st.isActive;
-    [self.onB setTitle:st.isActive ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    self.onB.backgroundColor = st.isActive ? [UIColor colorWithRed:0.6 green:0.1 blue:0.1 alpha:0.9] : [UIColor blackColor];
-    self.onB.layer.borderColor = st.isActive ? [UIColor colorWithRed:1 green:0.2 blue:0.2 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-    [self.n postMic:st.selectedIdx + 1];
-    [self.n postRun:st.isActive];
-    [self upd];
-}
-
-- (void)tapMs {
-    YallaState *st = [YallaState s];
-    st.msIdx = (st.msIdx + 1) % 5;
-    [self.msB setTitle:[NSString stringWithFormat:@"ms:%d", [st ms]] forState:UIControlStateNormal];
-    [self upd];
-}
-
-- (void)tapCxx {
-    YallaState *st = [YallaState s];
-    st.cxxOn = !st.cxxOn;
-    self.cxxB.backgroundColor = st.cxxOn ? [UIColor colorWithRed:0.6 green:0.1 blue:0.6 alpha:0.9] : [UIColor blackColor];
-    self.cxxB.layer.borderColor = st.cxxOn ? [UIColor colorWithRed:1 green:0.2 blue:1 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-    [self upd];
-}
-
-- (void)tapLite {
-    YallaState *st = [YallaState s];
-    st.liteOn = !st.liteOn;
-    self.liteB.backgroundColor = st.liteOn ? [UIColor colorWithRed:0.1 green:0.1 blue:0.6 alpha:0.9] : [UIColor blackColor];
-    self.liteB.layer.borderColor = st.liteOn ? [UIColor colorWithRed:0.2 green:0.2 blue:1 alpha:0.9].CGColor : [UIColor colorWithRed:0.15 green:0.15 blue:0.15 alpha:0.6].CGColor;
-    [self upd];
-}
-
-- (void)tapHide { self.panel.hidden = YES; self.dot.hidden = NO; }
-- (void)showP { self.panel.hidden = NO; self.dot.hidden = YES; }
-
-- (void)pan:(UIPanGestureRecognizer *)g {
-    UIView *v = g.view;
-    if (g.state == 1) {
-        objc_setAssociatedObject(g, _cmd, [NSValue valueWithCGPoint:v.center], 1);
-    } else if (g.state == 2) {
-        NSValue *val = objc_getAssociatedObject(g, _cmd);
-        if (val) {
-            CGPoint s = [val CGPointValue];
-            CGPoint t = [g translationInView:v.superview];
-            v.center = CGPointMake(s.x + t.x, s.y + t.y);
-        }
-    }
-}
-
-- (void)upd {
-    YallaState *st = [YallaState s];
-    int cnt = [[TapReg shared] cnt];
-    NSString *slot = st.selectedIdx >= 0 ? [NSString stringWithFormat:@"Slot %d", st.selectedIdx + 1] : @"None";
-    self.st.text = [NSString stringWithFormat:@"%@ | ms:%d %@%@ (%d)", slot, [st ms], st.liteOn ? @"LiTE" : @"", st.cxxOn ? @" cxx" : @"", cnt];
-}
-
 @end
-
-static YallaUI *gUI;
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
         if (![bid isEqualToString:kYallaBundle]) return;
         dispatch_async(dispatch_get_main_queue(), ^{
-            if (gUI) return;
-            gUI = [[YallaUI alloc] init];
+#ifdef YM_DIRECT
+            [_YM buildUI];
+#else
+            [_YM showPass];
+#endif
         });
     }
 }
