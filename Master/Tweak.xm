@@ -1,5 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
+#import <QuartzCore/QuartzCore.h>
 #import <objc/runtime.h>
 
 #define kYallaBundle @"com.yalla.yallalite"
