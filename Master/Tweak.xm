@@ -3,24 +3,16 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
-#pragma mark - Crash Prevention (from reference dylib)
+#pragma mark - Crash Prevention
 
 static void ym_uncaughtExceptionHandler(NSException *exception) {
     NSLog(@"[YallaMaster] exception=%@ reason=%@", exception.name, exception.reason);
-}
-
-static void ym_signalHandler(int sig) {
-    NSLog(@"[YallaMaster] signal=%d", sig);
 }
 
 static void ym_installCrashProtection(void) {
     static dispatch_once_t t;
     dispatch_once(&t, ^{
         NSSetUncaughtExceptionHandler(&ym_uncaughtExceptionHandler);
-        signal(SIGSEGV, ym_signalHandler);
-        signal(SIGBUS, ym_signalHandler);
-        signal(SIGABRT, ym_signalHandler);
-        signal(SIGILL, ym_signalHandler);
     });
 }
 
@@ -199,9 +191,11 @@ static void ym_startTapObserver(void) {
             NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-        [NSTimer scheduledTimerWithTimeInterval:5.0 repeats:YES block:^(NSTimer *t) {
-            [[YMTapRegistry shared] prune];
-        }];
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [NSTimer scheduledTimerWithTimeInterval:5.0 repeats:YES block:^(NSTimer *t) {
+                [[YMTapRegistry shared] prune];
+            }];
+        });
     });
 }
 
@@ -938,22 +932,14 @@ static BOOL glitchBlock = NO;
 }
 @end
 
-#pragma mark - Hooks
+#pragma mark - Init
 
 static YMUI *gUI = nil;
 
-static NSTimer *gInitTimer = nil;
-
-static void ym_tryInitUI(void) {
-    if (gUI) {
-        [gInitTimer invalidate];
-        gInitTimer = nil;
-        return;
-    }
+static void ym_createUI(void) {
+    if (gUI) return;
     if (!ym_keyWindow()) return;
     gUI = [[YMUI alloc] init];
-    [gInitTimer invalidate];
-    gInitTimer = nil;
 }
 
 __attribute__((constructor)) static void init() {
@@ -961,35 +947,8 @@ __attribute__((constructor)) static void init() {
         ym_installCrashProtection();
         ym_startTapObserver();
         if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYalla]) {
-            // Background task to keep tweak alive
-            static UIBackgroundTaskIdentifier bgTask = UIBackgroundTaskInvalid;
-            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-                bgTask = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"YallaMasterBG" expirationHandler:^{
-                    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
-                    bgTask = UIBackgroundTaskInvalid;
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                        bgTask = [[UIApplication sharedApplication] beginBackgroundTaskWithName:@"YallaMasterBG" expirationHandler:^{
-                            [[UIApplication sharedApplication] endBackgroundTask:bgTask];
-                            bgTask = UIBackgroundTaskInvalid;
-                        }];
-                    });
-                }];
-            }];
-            [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationWillEnterForegroundNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-                if (bgTask != UIBackgroundTaskInvalid) {
-                    [[UIApplication sharedApplication] endBackgroundTask:bgTask];
-                    bgTask = UIBackgroundTaskInvalid;
-                }
-                if (gUI) [gUI upd];
-            }];
-
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                ym_tryInitUI();
-                if (!gUI) {
-                    gInitTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
-                        ym_tryInitUI();
-                    }];
-                }
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                ym_createUI();
             });
         }
     }

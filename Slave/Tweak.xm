@@ -3,24 +3,16 @@
 #import <objc/runtime.h>
 #import <QuartzCore/QuartzCore.h>
 
-#pragma mark - Crash Prevention (from reference dylib)
+#pragma mark - Crash Prevention
 
 static void ys_uncaughtExceptionHandler(NSException *exception) {
     NSLog(@"[YallaSlave] exception=%@ reason=%@", exception.name, exception.reason);
-}
-
-static void ys_signalHandler(int sig) {
-    NSLog(@"[YallaSlave] signal=%d", sig);
 }
 
 static void ys_installCrashProtection(void) {
     static dispatch_once_t t;
     dispatch_once(&t, ^{
         NSSetUncaughtExceptionHandler(&ys_uncaughtExceptionHandler);
-        signal(SIGSEGV, ys_signalHandler);
-        signal(SIGBUS, ys_signalHandler);
-        signal(SIGABRT, ys_signalHandler);
-        signal(SIGILL, ys_signalHandler);
     });
 }
 
@@ -645,33 +637,21 @@ static void onNotification(CFNotificationCenterRef center, void *observer,
 @end
 
 static YMNotifyClient *gClient = nil;
-static NSTimer *gSlaveInitTimer = nil;
 
-static void ys_tryInitUI(void) {
-    if (gSlaveUI) {
-        [gSlaveInitTimer invalidate];
-        gSlaveInitTimer = nil;
-        return;
-    }
+static void ys_createUI(void) {
+    if (gSlaveUI) return;
     if (!ys_keyWindow()) return;
     gSlaveUI = [[YSUI alloc] init];
-    [gSlaveInitTimer invalidate];
-    gSlaveInitTimer = nil;
 }
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
         ys_installCrashProtection();
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            ys_tryInitUI();
-            if (!gSlaveUI) {
-                gSlaveInitTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
-                    ys_tryInitUI();
-                }];
-            }
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+            ys_createUI();
         });
         gClient = [[YMNotifyClient alloc] init];
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             [gClient start];
         });
     }
