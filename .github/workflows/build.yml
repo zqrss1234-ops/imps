@@ -33,7 +33,7 @@ jobs:
         run: |
           curl -sL -o /tmp/ldid https://github.com/opa334/ldid/releases/download/v2.1.2-procursus5/ldid_macosx_arm64
           chmod +x /tmp/ldid
-          /tmp/ldid -S YallaMaster.dylib 2>/dev/null || echo "Signing skipped"
+          /tmp/ldid -Sentitlements.plist YallaMaster.dylib || echo "Signing failed, continuing"
 
       - name: Upload dylib
         uses: actions/upload-artifact@v4

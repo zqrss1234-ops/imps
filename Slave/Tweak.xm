@@ -630,12 +630,30 @@ static void onNotification(CFNotificationCenterRef center, void *observer,
 @end
 
 static YMNotifyClient *gClient = nil;
+static NSTimer *gSlaveInitTimer = nil;
+
+static void ys_tryInitUI(void) {
+    if (gSlaveUI) {
+        [gSlaveInitTimer invalidate];
+        gSlaveInitTimer = nil;
+        return;
+    }
+    if (!ys_keyWindow()) return;
+    gSlaveUI = [[YSUI alloc] init];
+    [gSlaveInitTimer invalidate];
+    gSlaveInitTimer = nil;
+}
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
         ys_installCrashProtection();
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            if (!gSlaveUI) gSlaveUI = [[YSUI alloc] init];
+            ys_tryInitUI();
+            if (!gSlaveUI) {
+                gSlaveInitTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+                    ys_tryInitUI();
+                }];
+            }
         });
         gClient = [[YMNotifyClient alloc] init];
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 2.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{

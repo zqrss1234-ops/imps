@@ -929,32 +929,24 @@ static BOOL glitchBlock = NO;
 
 static YMUI *gUI = nil;
 
-#pragma mark - Method Swizzling (Substrate-free)
+static NSTimer *gInitTimer = nil;
 
-static void (*orig_viewDidAppear)(id, SEL, BOOL);
-static void hook_viewDidAppear(id self, SEL _cmd, BOOL animated) {
-    orig_viewDidAppear(self, _cmd, animated);
-    static dispatch_once_t t;
-    dispatch_once(&t, ^{
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-            if (!gUI) gUI = [[YMUI alloc] init];
-        });
-    });
-}
-
-static void ym_swizzleViewDidAppear(void) {
-    Class cls = [UIViewController class];
-    SEL sel = @selector(viewDidAppear:);
-    Method m = class_getInstanceMethod(cls, sel);
-    orig_viewDidAppear = (void(*)(id, SEL, BOOL))method_getImplementation(m);
-    method_setImplementation(m, (IMP)hook_viewDidAppear);
+static void ym_tryInitUI(void) {
+    if (gUI) {
+        [gInitTimer invalidate];
+        gInitTimer = nil;
+        return;
+    }
+    if (!ym_keyWindow()) return;
+    gUI = [[YMUI alloc] init];
+    [gInitTimer invalidate];
+    gInitTimer = nil;
 }
 
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
         ym_installCrashProtection();
         ym_startTapObserver();
-        ym_swizzleViewDidAppear();
         if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:kYalla]) {
             // Background task to keep tweak alive
             static UIBackgroundTaskIdentifier bgTask = UIBackgroundTaskInvalid;
@@ -978,8 +970,13 @@ __attribute__((constructor)) static void init() {
                 if (gUI) [gUI upd];
             }];
 
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                if (!gUI) gUI = [[YMUI alloc] init];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                ym_tryInitUI();
+                if (!gUI) {
+                    gInitTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 repeats:YES block:^(NSTimer *t) {
+                        ym_tryInitUI();
+                    }];
+                }
             });
         }
     }
