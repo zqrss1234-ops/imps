@@ -83,7 +83,6 @@ static NSString *const kNameList[8] = {
 - (void)recv:(NSString *)u {
     [_lock lock];
     _taps[u] = @([[NSDate date] timeIntervalSince1970]);
-    if ((int)_taps.count > _totalEver) _totalEver = (int)_taps.count;
     [_lock unlock];
 }
 - (void)prune {
