@@ -56,15 +56,15 @@ jobs:
             build_direct_status.txt
           if-no-files-found: warn
 
-      - name: Sign dylibs
+      - name: Sign and stage dylibs
         if: always()
         run: |
-          curl -sL -o /tmp/ldid https://github.com/opa334/ldid/releases/download/v2.1.2-procursus5/ldid_macosx_arm64
+          curl -sL -o /tmp/ldid https://github.com/ProcursusTeam/ldid/releases/download/v2.1.5-procursus7/ldid_macosx_arm64
           chmod +x /tmp/ldid
+          mkdir -p output
           for f in YallaMaster.dylib YallaMaster_DIRECT.dylib; do
             if [ -f "$f" ]; then
-              /tmp/ldid -Sentitlements.plist "$f"
-              mkdir -p output
+              /tmp/ldid -Sentitlements.plist "$f" || echo "Signing $f failed, uploading unsigned"
               cp "$f" output/
             fi
           done
