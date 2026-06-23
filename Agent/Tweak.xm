@@ -16,6 +16,7 @@ static const int kMsVals[] = {50, 25, 10, 5, 1};
 static int s_instanceId = 0;
 static BOOL s_isMain = NO;
 
+// Master state
 static int s_sel = -1;
 static int s_msIdx = 0;
 static BOOL s_on = NO;
@@ -25,21 +26,23 @@ static int s_slaveCount = 0;
 static int s_totalEver = 0;
 static int s_cxxCount = 0;
 
+// Slave state
 static int s_slvMsIdx = 2;
 static BOOL s_slvLite = NO;
 static BOOL s_slvCxx = NO;
 static __weak UIView *s_micFace = nil;
 static dispatch_source_t s_timer = NULL;
 
+// UI
 static UIWindow *s_overlay = nil;
-static UIView *s_panel = nil, *s_passView = nil;
+static UIView *s_panel = nil;
+static UIView *s_passView = nil;
 static UITextField *s_passField = nil;
 static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
 static UIButton *s_onBtn = nil;
 static NSMutableArray *s_nums = nil;
 static UIView *s_circle = nil;
 static BOOL s_uiReady = NO;
-static BOOL s_setupAttempted = NO;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
@@ -173,15 +176,6 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [self buildUI];
 }
 
-- (UILabel *)mkL:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h t:(NSString *)t fs:(CGFloat)fs {
-    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
-    lb.text = t;
-    lb.textColor = [UIColor whiteColor];
-    lb.font = [UIFont boldSystemFontOfSize:fs];
-    lb.textAlignment = NSTextAlignmentCenter;
-    return lb;
-}
-
 - (void)buildUI {
     CGFloat sw = [UIScreen mainScreen].bounds.size.width;
     CGFloat sh = [UIScreen mainScreen].bounds.size.height;
@@ -261,6 +255,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     CGFloat msx = csx + cw + 4;
     s_msL = [self mkL:msx y:82 w:cw h:30 t:@"ms:50" fs:11];
     s_msL.backgroundColor = clr(20, 30, 70, 0.9);
+    s_msL.layer.cornerRadius = 8;
     s_msL.layer.borderWidth = 1;
     s_msL.layer.borderColor = clr(40, 70, 150, 0.5).CGColor;
     [s_panel addSubview:s_msL];
@@ -273,6 +268,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     CGFloat cxx = csx + 2*(cw+4);
     s_cxxL = [self mkL:cxx y:82 w:cw h:30 t:@"cxx" fs:11];
     s_cxxL.backgroundColor = [UIColor clearColor];
+    s_cxxL.layer.cornerRadius = 8;
     s_cxxL.layer.borderWidth = 1;
     s_cxxL.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     [s_panel addSubview:s_cxxL];
@@ -285,6 +281,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     CGFloat lx = csx + 3*(cw+4);
     s_liteL = [self mkL:lx y:82 w:cw h:30 t:@"LiTE" fs:11];
     s_liteL.backgroundColor = [UIColor clearColor];
+    s_liteL.layer.cornerRadius = 8;
     s_liteL.layer.borderWidth = 1;
     s_liteL.layer.borderColor = [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     [s_panel addSubview:s_liteL];
@@ -349,6 +346,15 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 
     [s_overlay addSubview:s_circle];
     [self upd];
+}
+
+- (UILabel *)mkL:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h t:(NSString *)t fs:(CGFloat)fs {
+    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
+    lb.text = t;
+    lb.textColor = [UIColor whiteColor];
+    lb.font = [UIFont boldSystemFontOfSize:fs];
+    lb.textAlignment = NSTextAlignmentCenter;
+    return lb;
 }
 
 - (void)panP:(UIPanGestureRecognizer *)g {
@@ -420,6 +426,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_passField becomeFirstResponder];
 }
 
+// Slave
 - (void)slvLite:(BOOL)on {
     dispatch_async(dispatch_get_main_queue(), ^{
         UIView *f = findLiveMikeFace();
@@ -574,41 +581,35 @@ static void ysHandler(NSException *e) {
     NSLog(@"[YA] %@: %@", e.name, e.reason);
 }
 
-// --- swizzle didMoveToWindow on UIView ---
-static void (*orig_didMoveToWindow)(id, SEL);
+// Hook target: UIViewController viewDidAppear:
+// Fires when ANY view controller appears on screen.
+// We find the first one that contains the LiveMikeFace view (main room VC)
+// and add our overlay window at that point (scene/window guaranteed ready).
+static UIWindowScene *s_scene = nil;
+static void (*orig_viewDidAppear)(id, SEL, BOOL);
 
-static void hook_didMoveToWindow(id self, SEL _cmd) {
-    orig_didMoveToWindow(self, _cmd);
-    if (s_uiReady || !s_isMain || s_setupAttempted) return;
-    NSString *cn = NSStringFromClass([self class]);
-    if (![cn containsString:@"LTLiveMikeFace"] && ![cn containsString:@"LiveMikeFace"]
-        && ![cn containsString:@"YallaCall"]) return;
-    s_setupAttempted = YES;
-    UIView *v = self;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id sc = nil;
-        if (@available(iOS 13.0, *)) {
-            sc = v.window.windowScene;
-        }
-        createOverlay(sc);
-    });
-}
-
-// --- create overlay window ---
-static void createOverlay(id scene) {
+static void createOverlay(void) {
     if (s_overlay) return;
     s_overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     s_overlay.windowLevel = UIWindowLevelAlert;
-    if (@available(iOS 13.0, *)) {
-        if (scene) s_overlay.windowScene = scene;
-    }
     s_overlay.backgroundColor = [UIColor clearColor];
     s_overlay.userInteractionEnabled = YES;
     s_overlay.rootViewController = [[UIViewController alloc] init];
     s_overlay.rootViewController.view.backgroundColor = [UIColor clearColor];
     s_overlay.rootViewController.view.userInteractionEnabled = NO;
+    if (@available(iOS 13.0, *)) {
+        if (s_scene) {
+            s_overlay.windowScene = s_scene;
+        } else {
+            for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+                if (scene.activationState == UISceneActivationStateForegroundActive) {
+                    s_overlay.windowScene = (UIWindowScene *)scene;
+                    break;
+                }
+            }
+        }
+    }
     [s_overlay makeKeyAndVisible];
-    s_uiReady = YES;
 #ifdef YM_DIRECT
     [s_agent buildUI];
 #else
@@ -616,24 +617,24 @@ static void createOverlay(id scene) {
 #endif
 }
 
-// --- fallback: try every 1s until LiveMikeFace appears ---
-static void fallbackSetup(void) {
+static void trySetupUI(void) {
     if (s_uiReady || !s_isMain) return;
-    UIView *face = findLiveMikeFace();
-    if (face) {
-        s_setupAttempted = YES;
-        __block UIView *bface = face;
-        dispatch_async(dispatch_get_main_queue(), ^{
-            id sc = nil;
-            if (@available(iOS 13.0, *)) {
-                sc = bface.window.windowScene;
-            }
-            createOverlay(sc);
-        });
-    } else {
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
-            dispatch_get_main_queue(), ^{ fallbackSetup(); });
+    if (!findLiveMikeFace()) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+            dispatch_get_main_queue(), ^{ trySetupUI(); });
+        return;
     }
+    s_uiReady = YES;
+    dispatch_async(dispatch_get_main_queue(), ^{ createOverlay(); });
+}
+
+static void hook_viewDidAppear(id self, SEL _cmd, BOOL animated) {
+    orig_viewDidAppear(self, _cmd, animated);
+    if (!s_isMain || s_uiReady) return;
+    if (@available(iOS 13.0, *)) {
+        if (!s_scene) s_scene = self.view.window.windowScene;
+    }
+    trySetupUI();
 }
 
 __attribute__((constructor)) static void init() {
@@ -646,16 +647,6 @@ __attribute__((constructor)) static void init() {
 
         NSSetUncaughtExceptionHandler(&ysHandler);
 
-        s_agent = [[YA alloc] init];
-
-        // Swizzle UIView didMoveToWindow
-        Class cls = [UIView class];
-        SEL sel = @selector(didMoveToWindow);
-        Method m = class_getInstanceMethod(cls, sel);
-        orig_didMoveToWindow = (void (*)(id, SEL))method_getImplementation(m);
-        method_setImplementation(m, (IMP)hook_didMoveToWindow);
-
-        // Register Darwin notifications
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), NULL, onNotify,
             NULL, NULL,
@@ -665,17 +656,20 @@ __attribute__((constructor)) static void init() {
             NULL, NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-        // Fallback: timer-based setup
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-            fallbackSetup();
-        });
+        s_agent = [[YA alloc] init];
 
-        // Fallback: app active notification
+        // Hook UIViewController viewDidAppear: to detect when UI is ready
+        Class cls = [UIViewController class];
+        SEL sel = @selector(viewDidAppear:);
+        Method m = class_getInstanceMethod(cls, sel);
+        orig_viewDidAppear = (void (*)(id, SEL, BOOL))method_getImplementation(m);
+        method_setImplementation(m, (IMP)hook_viewDidAppear);
+
+        // Fallback: also try when app becomes active (window/scene guaranteed)
         [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:nil usingBlock:^(NSNotification *note) {
-            if (!s_uiReady && s_isMain) fallbackSetup();
+            trySetupUI();
         }];
 
-        // Send initial heartbeat after 3s
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
             CFNotificationCenterPostNotification(
