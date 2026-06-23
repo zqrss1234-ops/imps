@@ -1,7 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
-#import <dlfcn.h>
 
 #define kYallaBundle @"com.yalla.yallalite"
 #define kNotifyPrefix @"com.yalla.liteagent.cmd."
@@ -35,9 +34,7 @@ static BOOL s_slvCxx = NO;
 static BOOL s_slvSafe = NO;
 static __weak UIView *s_micFace = nil;
 static dispatch_source_t s_timer = NULL;
-static void *s_glitchLib = NULL;
-static Class s_glitchClass = NULL;
-static id s_glitchInst = NULL;
+
 
 // UI
 static UIWindow *s_overlay = nil;
@@ -616,61 +613,112 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     }
 }
 
-// ==================== Glitch integration ====================
-- (BOOL)glitchLoad {
-    if (s_glitchLib) return YES;
-    s_glitchLib = dlopen("YallaGlitch.dylib", RTLD_NOW);
-    if (!s_glitchLib) {
-        s_glitchLib = dlopen("/Library/MobileSubstrate/DynamicLibraries/YallaGlitch.dylib", RTLD_NOW);
+// ==================== Glitch integration (native) ====================
+static UIView *s_glitchOverlay = nil;
+static UILabel *s_glitchLabel = nil;
+static void *s_soundID = NULL;
+
+- (UIView *)findMicInstanceInView:(UIView *)v {
+    if (!v) return nil;
+    NSString *cn = NSStringFromClass([v class]);
+    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) return v;
+    for (UIView *sv in v.subviews) {
+        UIView *found = [self findMicInstanceInView:sv];
+        if (found) return found;
     }
-    if (!s_glitchLib) return NO;
-    s_glitchClass = NSClassFromString(@"GlitchManager");
-    if (!s_glitchClass) return NO;
-    return YES;
+    return nil;
+}
+
+- (void)createOverlay {
+    if (s_glitchOverlay) return;
+    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
+    CGFloat ow = 200, oh = 120;
+    s_glitchOverlay = [[UIView alloc] initWithFrame:CGRectMake((sw-ow)/2, 80, ow, oh)];
+    s_glitchOverlay.backgroundColor = clr(200,0,0,0.85);
+    s_glitchOverlay.layer.cornerRadius = 14;
+    s_glitchOverlay.layer.borderWidth = 2;
+    s_glitchOverlay.layer.borderColor = clr(255,200,0,0.9).CGColor;
+    s_glitchOverlay.clipsToBounds = YES;
+    s_glitchOverlay.alpha = 0;
+    s_glitchOverlay.tag = 1001;
+
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, ow, 24)];
+    title.text = @"⚠️ GLITCH";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont boldSystemFontOfSize:18];
+    title.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:title];
+
+    s_glitchLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 48, ow, 20)];
+    s_glitchLabel.text = @"TARGET LOCKED";
+    s_glitchLabel.textColor = clr(255,200,0,1);
+    s_glitchLabel.font = [UIFont boldSystemFontOfSize:13];
+    s_glitchLabel.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:s_glitchLabel];
+
+    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(0, 72, ow, 16)];
+    sub.text = @"cxx glitch active";
+    sub.textColor = [UIColor whiteColor];
+    sub.font = [UIFont systemFontOfSize:10];
+    sub.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:sub];
+
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
+    [s_glitchOverlay addGestureRecognizer:pan];
+
+    [s_overlay addSubview:s_glitchOverlay];
+    [UIView animateWithDuration:0.3 animations:^{
+        s_glitchOverlay.alpha = 1;
+        s_glitchOverlay.transform = CGAffineTransformMakeScale(1.1, 1.1);
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.15 animations:^{
+            s_glitchOverlay.transform = CGAffineTransformIdentity;
+        }];
+    }];
+}
+
+- (void)handlePan:(UIPanGestureRecognizer *)g {
+    static CGPoint sc;
+    UIView *v = g.view;
+    if (g.state == 1) sc = v.center;
+    if (g.state == 2) {
+        CGPoint t = [g translationInView:v.superview];
+        v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
+    }
+}
+
+- (void)executeCommandsOnView:(UIView *)f {
+    if (!f) return;
+    callSel(f, @"d6s:result:", @(1), nil);
+    callSel(f, @"c7rs:result:", @(1), nil);
+    callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
+    callSel(f, @"cxxNoSync", nil, nil);
+    callSel(f, @"g3v:", @(1), nil);
+    callSel(f, @"q2f:", @(1), nil);
+    callSel(f, @"u8k:", @(1), nil);
+    callSel(f, @"scan:result:", @(1), nil);
 }
 
 - (void)glitchOn {
-    if (![self glitchLoad]) return;
     @try {
-        if (!s_glitchInst) {
-            SEL sharedSel = NSSelectorFromString(@"sharedInstance");
-            if ([s_glitchClass respondsToSelector:sharedSel]) {
-                s_glitchInst = ((id(*)(id,SEL))[s_glitchClass methodForSelector:sharedSel])(s_glitchClass, sharedSel);
-            }
-            if (!s_glitchInst) {
-                SEL initSel = NSSelectorFromString(@"init");
-                if ([s_glitchClass respondsToSelector:initSel]) {
-                    s_glitchInst = ((id(*)(id,SEL))[s_glitchClass alloc]);
-                    if (s_glitchInst) s_glitchInst = ((id(*)(id,SEL))[s_glitchInst methodForSelector:initSel])(s_glitchInst, initSel);
-                }
-            }
-        }
-        SEL startSel = NSSelectorFromString(@"startGlitch");
-        if (s_glitchInst && [s_glitchInst respondsToSelector:startSel]) {
-            ((void(*)(id,SEL))[s_glitchInst methodForSelector:startSel])(s_glitchInst, startSel);
-            return;
-        }
-        SEL beginSel = NSSelectorFromString(@"begin");
-        if (s_glitchInst && [s_glitchInst respondsToSelector:beginSel]) {
-            ((void(*)(id,SEL))[s_glitchInst methodForSelector:beginSel])(s_glitchInst, beginSel);
-            return;
-        }
+        [self createOverlay];
     } @catch(NSException *e) {
         NSLog(@"[YA] glitchOn error: %@", e.reason);
     }
 }
 
 - (void)glitchOff {
-    if (!s_glitchInst) return;
     @try {
-        SEL stopSel = NSSelectorFromString(@"stopGlitch");
-        if ([s_glitchInst respondsToSelector:stopSel]) {
-            ((void(*)(id,SEL))[s_glitchInst methodForSelector:stopSel])(s_glitchInst, stopSel);
-            return;
-        }
-        SEL endSel = NSSelectorFromString(@"end");
-        if ([s_glitchInst respondsToSelector:endSel]) {
-            ((void(*)(id,SEL))[s_glitchInst methodForSelector:endSel])(s_glitchInst, endSel);
+        if (s_glitchOverlay) {
+            [UIView animateWithDuration:0.2 animations:^{
+                s_glitchOverlay.alpha = 0;
+                s_glitchOverlay.transform = CGAffineTransformMakeScale(0.8, 0.8);
+            } completion:^(BOOL finished) {
+                [s_glitchOverlay removeFromSuperview];
+                s_glitchOverlay = nil;
+                s_glitchLabel = nil;
+            }];
         }
     } @catch(NSException *e) {
         NSLog(@"[YA] glitchOff error: %@", e.reason);
