@@ -1,0 +1,484 @@
+{
+  "all" : [
+    {
+      "countryName" : "Argelia",
+      "countryCode" : 213,
+      "id" : 3,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_3.png",
+      "isoCode" : "DZ"
+    },
+    {
+      "countryName" : "Angola",
+      "countryCode" : 244,
+      "id" : 61,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_61.png",
+      "isoCode" : "AO"
+    },
+    {
+      "countryName" : "Argentina",
+      "countryCode" : 54,
+      "id" : 50,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_50.png",
+      "isoCode" : "AR"
+    },
+    {
+      "countryName" : "Australia",
+      "countryCode" : 61,
+      "id" : 64,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_64.png",
+      "isoCode" : "AU"
+    },
+    {
+      "countryName" : "Austria",
+      "countryCode" : 43,
+      "id" : 104,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_104.png",
+      "isoCode" : "AT"
+    },
+    {
+      "countryName" : "Azerbaiyán",
+      "countryCode" : 994,
+      "id" : 98,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_98.png",
+      "isoCode" : "AZ"
+    },
+    {
+      "countryName" : "Bahrein",
+      "countryCode" : 973,
+      "id" : 9,
+      "isHot" : false,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_9.png",
+      "isoCode" : "BH"
+    },
+    {
+      "countryName" : "Bangladesh",
+      "countryCode" : 880,
+      "id" : 35,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_35.png",
+      "isoCode" : "BD"
+    },
+    {
+      "countryName" : "Brasil",
+      "countryCode" : 55,
+      "id" : 33,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_33.png",
+      "isoCode" : "BR"
+    },
+    {
+      "countryName" : "Canadá",
+      "countryCode" : 1,
+      "id" : 32,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_32.png",
+      "isoCode" : "CA"
+    },
+    {
+      "countryName" : "Chile",
+      "countryCode" : 56,
+      "id" : 73,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_73.png",
+      "isoCode" : "CL"
+    },
+    {
+      "countryName" : "China",
+      "countryCode" : 86,
+      "id" : 19,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_19.png",
+      "isoCode" : "CN"
+    },
+    {
+      "countryName" : "Colombia",
+      "countryCode" : 57,
+      "id" : 47,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_47.png",
+      "isoCode" : "CO"
+    },
+    {
+      "countryName" : "Egipto",
+      "countryCode" : 20,
+      "id" : 2,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_2.png",
+      "isoCode" : "EG"
+    },
+    {
+      "countryName" : "Etiopía",
+      "countryCode" : 251,
+      "id" : 30,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_30.png",
+      "isoCode" : "ET"
+    },
+    {
+      "countryName" : "Francia",
+      "countryCode" : 33,
+      "id" : 21,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_21.png",
+      "isoCode" : "FR"
+    },
+    {
+      "countryName" : "Alemania",
+      "countryCode" : 49,
+      "id" : 23,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_23.png",
+      "isoCode" : "DE"
+    },
+    {
+      "countryName" : "India",
+      "countryCode" : 91,
+      "id" : 17,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_17.png",
+      "isoCode" : "IN"
+    },
+    {
+      "countryName" : "Indonesia",
+      "countryCode" : 62,
+      "id" : 18,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_18.png",
+      "isoCode" : "ID"
+    },
+    {
+      "countryName" : "Irak",
+      "countryCode" : 964,
+      "id" : 8,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_8.png",
+      "isoCode" : "IQ"
+    },
+    {
+      "countryName" : "Italia",
+      "countryCode" : 39,
+      "id" : 25,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_25.png",
+      "isoCode" : "IT"
+    },
+    {
+      "countryName" : "Japón",
+      "countryCode" : 81,
+      "id" : 37,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_37.png",
+      "isoCode" : "JP"
+    },
+    {
+      "countryName" : "Jordán",
+      "countryCode" : 962,
+      "id" : 5,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_5.png",
+      "isoCode" : "JO"
+    },
+    {
+      "countryName" : "KSA",
+      "countryCode" : 966,
+      "id" : 1,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_1.png",
+      "isoCode" : "SA"
+    },
+    {
+      "countryName" : "Kuwait",
+      "countryCode" : 965,
+      "id" : 7,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_7.png",
+      "isoCode" : "KW"
+    },
+    {
+      "countryName" : "Líbano",
+      "countryCode" : 961,
+      "id" : 13,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_13.png",
+      "isoCode" : "LB"
+    },
+    {
+      "countryName" : "Libia",
+      "countryCode" : 218,
+      "id" : 27,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_27.png",
+      "isoCode" : "LY"
+    },
+    {
+      "countryName" : "Malasia",
+      "countryCode" : 60,
+      "id" : 56,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_56.png",
+      "isoCode" : "MY"
+    },
+    {
+      "countryName" : "México",
+      "countryCode" : 52,
+      "id" : 36,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_36.png",
+      "isoCode" : "MX"
+    },
+    {
+      "countryName" : "Marruecos",
+      "countryCode" : 212,
+      "id" : 4,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_4.png",
+      "isoCode" : "MA"
+    },
+    {
+      "countryName" : "Nepal",
+      "countryCode" : 977,
+      "id" : 58,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_58.png",
+      "isoCode" : "NP"
+    },
+    {
+      "countryName" : "Holanda",
+      "countryCode" : 31,
+      "id" : 76,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_76.png",
+      "isoCode" : "NL"
+    },
+    {
+      "countryName" : "Omán",
+      "countryCode" : 968,
+      "id" : 14,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_14.png",
+      "isoCode" : "OM"
+    },
+    {
+      "countryName" : "Pakistán",
+      "countryCode" : 92,
+      "id" : 16,
+      "isHot" : true,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_16.png",
+      "isoCode" : "PK"
+    },
+    {
+      "countryName" : "Palestina",
+      "countryCode" : 970,
+      "id" : 15,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_15.png",
+      "isoCode" : "PS"
+    },
+    {
+      "countryName" : "Filipinas",
+      "countryCode" : 63,
+      "id" : 38,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_38.png",
+      "isoCode" : "PH"
+    },
+    {
+      "countryName" : "Portugal",
+      "countryCode" : 351,
+      "id" : 97,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_97.png",
+      "isoCode" : "PT"
+    },
+    {
+      "countryName" : "Katar",
+      "countryCode" : 974,
+      "id" : 11,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_11.png",
+      "isoCode" : "QA"
+    },
+    {
+      "countryName" : "Rusia",
+      "countryCode" : 7,
+      "id" : 26,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_26.png",
+      "isoCode" : "RU"
+    },
+    {
+      "countryName" : "España",
+      "countryCode" : 34,
+      "id" : 24,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_24.png",
+      "isoCode" : "ES"
+    },
+    {
+      "countryName" : "Sudán",
+      "countryCode" : 249,
+      "id" : 29,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_29.png",
+      "isoCode" : "SD"
+    },
+    {
+      "countryName" : "Siria",
+      "countryCode" : 963,
+      "id" : 10,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_10.png",
+      "isoCode" : "SY"
+    },
+    {
+      "countryName" : "Túnez",
+      "countryCode" : 216,
+      "id" : 28,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_28.png",
+      "isoCode" : "TN"
+    },
+    {
+      "countryName" : "Turquía",
+      "countryCode" : 90,
+      "id" : 20,
+      "isHot" : false,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_20.png",
+      "isoCode" : "TR"
+    },
+    {
+      "countryName" : "EAU",
+      "countryCode" : 971,
+      "id" : 6,
+      "isHot" : false,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_6.png",
+      "isoCode" : "AE"
+    },
+    {
+      "countryName" : "Reino Unido",
+      "countryCode" : 44,
+      "id" : 22,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_22.png",
+      "isoCode" : "UK"
+    },
+    {
+      "countryName" : "Estados Unidos",
+      "countryCode" : 1,
+      "id" : 31,
+      "isHot" : false,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_31.png",
+      "isoCode" : "US"
+    },
+    {
+      "countryName" : "Yemen",
+      "countryCode" : 967,
+      "id" : 12,
+      "isHot" : false,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_12.png",
+      "isoCode" : "YE"
+    }
+  ],
+  "hot" : [
+    {
+      "countryName" : "KSA",
+      "countryCode" : 966,
+      "id" : 1,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_1.png",
+      "isoCode" : "SA"
+    },
+    {
+      "countryName" : "Omán",
+      "countryCode" : 968,
+      "id" : 14,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_14.png",
+      "isoCode" : "OM"
+    },
+    {
+      "countryName" : "Katar",
+      "countryCode" : 974,
+      "id" : 11,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_11.png",
+      "isoCode" : "QA"
+    },
+    {
+      "countryName" : "Kuwait",
+      "countryCode" : 965,
+      "id" : 7,
+      "isHot" : true,
+      "isWhite" : true,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_7.png",
+      "isoCode" : "KW"
+    },
+    {
+      "countryName" : "Pakistán",
+      "countryCode" : 92,
+      "id" : 16,
+      "isHot" : true,
+      "isWhite" : false,
+      "icon" : "https:\/\/yallatestfile.yalla.live\/flags\/Flag_16.png",
+      "isoCode" : "PK"
+    }
+  ]
+}
+

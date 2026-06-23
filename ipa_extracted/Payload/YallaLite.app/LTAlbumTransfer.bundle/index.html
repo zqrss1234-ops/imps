@@ -1,0 +1,61 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+    <meta name="viewport" content="width=device-width , initial-scale=1.0 , user-scalable=0 , minimum-scale=1.0 , maximum-scale=1.0" />
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=EmulateIE8,chrome=1">
+    <title>Yalla music upoader</title>
+    <link href="css/webuploader.css" rel="stylesheet" type="text/css" />
+    <link href="css/style.css" rel="stylesheet" type="text/css" />
+</head>
+
+<body>
+    <div id="header"></div>
+    <div id="content">
+        <table>
+            <tr>
+                <td id="logo" colspan="2">                 
+                    <img src="images/w.jpg" width="504" height="99"/>
+                </td>
+            </tr>
+            <tr>
+                <td id="desc" colspan="2">
+                    Device connected, you can upload now.<br>Tips: only mp3 supported
+                </td>
+            </tr>
+            <tr>
+                <td>
+                    <div id="file_picker">
+                        <img src="images/select_btn.jpg" width="195" height="52" />
+                    </div>
+                </td>
+
+                <td>
+                    <img id="upload_button" style="display: none;" src="images/upload_enabled.jpg" width="195" height="52" />
+                    <img id="upload_button_disabled" src="images/upload_disabled.jpg" width="195" height="52" />
+                </td>
+            </tr>
+            <tr>
+                <td id="selected_music_title" colspan="2">
+                    <div>Selected</div>
+                    <div id="selected_music_title_bottom_border" />
+                </td>
+            </tr>
+        </table>
+        <table id="file_list">
+            <tr>
+                <td id="no_data_tip" colspan="2" style="padding:50px 140px">
+                    
+                </td>
+            </tr>
+        </table>
+    </div>
+
+    <script type="text/javascript" src="js/jquery-1.10.2.min.js"></script>
+    <script type="text/javascript" src="js/webuploader.js"></script>
+    <script type="text/javascript" src="js/index.js"></script>
+</body>
+
+</html>

@@ -1,0 +1,146 @@
+
+Ferrari.png
+size: 1032,530
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+che_13
+  rotate: false
+  xy: 444, 254
+  size: 582, 274
+  orig: 593, 289
+  offset: 5, 11
+  index: -1
+light1
+  rotate: false
+  xy: 332, 354
+  size: 80, 80
+  orig: 80, 80
+  offset: 0, 0
+  index: -1
+light2
+  rotate: true
+  xy: 989, 12
+  size: 79, 41
+  orig: 80, 80
+  offset: 0, 20
+  index: -1
+line1
+  rotate: true
+  xy: 2, 11
+  size: 517, 40
+  orig: 521, 40
+  offset: 2, 0
+  index: -1
+line2
+  rotate: false
+  xy: 310, 14
+  size: 190, 96
+  orig: 200, 100
+  offset: 1, 2
+  index: -1
+lizi/lizi_0
+  rotate: false
+  xy: 332, 436
+  size: 96, 92
+  orig: 154, 116
+  offset: 42, 16
+  index: -1
+lizi/lizi_11
+  rotate: true
+  xy: 609, 140
+  size: 112, 85
+  orig: 154, 116
+  offset: 33, 12
+  index: -1
+lizi/lizi_13
+  rotate: true
+  xy: 444, 128
+  size: 124, 83
+  orig: 154, 116
+  offset: 29, 17
+  index: -1
+lizi/lizi_15
+  rotate: true
+  xy: 502, 3
+  size: 123, 82
+  orig: 154, 116
+  offset: 24, 21
+  index: -1
+lizi/lizi_17
+  rotate: true
+  xy: 136, 4
+  size: 98, 93
+  orig: 154, 116
+  offset: 44, 13
+  index: -1
+lizi/lizi_2
+  rotate: true
+  xy: 44, 2
+  size: 100, 90
+  orig: 154, 116
+  offset: 37, 21
+  index: -1
+lizi/lizi_4
+  rotate: true
+  xy: 586, 14
+  size: 116, 71
+  orig: 154, 116
+  offset: 33, 18
+  index: -1
+lizi/lizi_6
+  rotate: true
+  xy: 332, 141
+  size: 111, 72
+  orig: 154, 116
+  offset: 29, 20
+  index: -1
+lizi/lizi_8
+  rotate: true
+  xy: 529, 132
+  size: 120, 78
+  orig: 154, 116
+  offset: 27, 14
+  index: -1
+lizi/lizi_9
+  rotate: true
+  xy: 231, 3
+  size: 107, 77
+  orig: 154, 116
+  offset: 38, 17
+  index: -1
+saoguang/saoguang_0
+  rotate: false
+  xy: 172, 112
+  size: 270, 27
+  orig: 614, 338
+  offset: 242, 20
+  index: -1
+saoguang/saoguang_2
+  rotate: false
+  xy: 696, 93
+  size: 332, 159
+  orig: 614, 338
+  offset: 230, 20
+  index: -1
+saoguang/saoguang_4
+  rotate: true
+  xy: 172, 141
+  size: 387, 158
+  orig: 614, 338
+  offset: 169, 75
+  index: -1
+saoguang/saoguang_6
+  rotate: true
+  xy: 44, 104
+  size: 424, 126
+  orig: 614, 338
+  offset: 54, 147
+  index: -1
+saoguang/saoguang_8
+  rotate: false
+  xy: 659, 9
+  size: 328, 82
+  orig: 614, 338
+  offset: 54, 212
+  index: -1

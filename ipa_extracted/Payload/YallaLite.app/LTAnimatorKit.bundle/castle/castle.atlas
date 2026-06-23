@@ -1,0 +1,479 @@
+
+castle.png
+size: 2047,2048
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+bjtiankong_0
+  rotate: false
+  xy: 2, 1110
+  size: 748, 936
+  orig: 748, 936
+  offset: 0, 0
+  index: -1
+caihong/caihong_0
+  rotate: false
+  xy: 1286, 1332
+  size: 27, 70
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_1
+  rotate: true
+  xy: 1784, 546
+  size: 46, 115
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_10
+  rotate: true
+  xy: 1784, 1292
+  size: 376, 220
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_2
+  rotate: true
+  xy: 1746, 40
+  size: 80, 164
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_3
+  rotate: true
+  xy: 1366, 5
+  size: 115, 195
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_4
+  rotate: false
+  xy: 1127, 1188
+  size: 157, 214
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_8
+  rotate: true
+  xy: 1784, 944
+  size: 346, 220
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_9
+  rotate: true
+  xy: 1784, 1670
+  size: 376, 220
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+chengbao_0
+  rotate: false
+  xy: 2, 407
+  size: 589, 701
+  orig: 598, 740
+  offset: 3, 21
+  index: -1
+hua03_16
+  rotate: true
+  xy: 752, 1110
+  size: 292, 373
+  orig: 327, 376
+  offset: 0, 0
+  index: -1
+hua_01_16
+  rotate: true
+  xy: 1563, 8
+  size: 112, 181
+  orig: 112, 224
+  offset: 0, 19
+  index: -1
+huaban/huaban01_12
+  rotate: false
+  xy: 593, 440
+  size: 376, 668
+  orig: 378, 669
+  offset: 1, 1
+  index: -1
+huaban/huaban01_13
+  rotate: false
+  xy: 971, 443
+  size: 376, 665
+  orig: 378, 669
+  offset: 1, 1
+  index: -1
+huaban/huaban01_2
+  rotate: true
+  xy: 2, 29
+  size: 376, 627
+  orig: 378, 669
+  offset: 1, 32
+  index: -1
+lizi/lizi1_1
+  rotate: true
+  xy: 1127, 1110
+  size: 76, 177
+  orig: 750, 548
+  offset: 0, 8
+  index: -1
+lizi/lizi1_15
+  rotate: true
+  xy: 1349, 544
+  size: 750, 433
+  orig: 750, 548
+  offset: 0, 16
+  index: -1
+lizi/lizi1_25
+  rotate: true
+  xy: 1328, 1296
+  size: 750, 454
+  orig: 750, 548
+  offset: 0, 23
+  index: -1
+lizi/lizi1_27
+  rotate: false
+  xy: 631, 2
+  size: 733, 436
+  orig: 750, 548
+  offset: 16, 47
+  index: -1
+lizi/lizi1_3
+  rotate: false
+  xy: 1784, 594
+  size: 201, 348
+  orig: 750, 548
+  offset: 0, 3
+  index: -1
+lizi/lizi1_7
+  rotate: false
+  xy: 1366, 122
+  size: 617, 420
+  orig: 750, 548
+  offset: 0, 9
+  index: -1
+ying/chibang1
+  rotate: true
+  xy: 1987, 846
+  size: 96, 58
+  orig: 96, 58
+  offset: 0, 0
+  index: -1
+ying/chibang2
+  rotate: true
+  xy: 1987, 768
+  size: 76, 50
+  orig: 77, 50
+  offset: 1, 0
+  index: -1
+ying/shenti
+  rotate: true
+  xy: 1912, 18
+  size: 102, 62
+  orig: 115, 66
+  offset: 0, 0
+  index: -1
+yun001_0
+  rotate: false
+  xy: 752, 1404
+  size: 574, 642
+  orig: 630, 660
+  offset: 34, 7
+  index: -1
+
+castle2.png
+size: 2008,2048
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+caihong/caihong_5
+  rotate: false
+  xy: 1742, 78
+  size: 204, 219
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_6
+  rotate: true
+  xy: 1520, 46
+  size: 251, 220
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caihong/caihong_7
+  rotate: true
+  xy: 752, 416
+  size: 308, 220
+  orig: 376, 246
+  offset: 0, 4
+  index: -1
+caodi01_0
+  rotate: false
+  xy: 2, 804
+  size: 750, 352
+  orig: 750, 364
+  offset: 0, 0
+  index: -1
+hua04_16
+  rotate: true
+  xy: 1504, 752
+  size: 260, 216
+  orig: 318, 216
+  offset: 54, 0
+  index: -1
+hua05_16
+  rotate: true
+  xy: 1722, 758
+  size: 254, 249
+  orig: 279, 285
+  offset: 25, 1
+  index: -1
+hua_02_16
+  rotate: true
+  xy: 974, 464
+  size: 260, 275
+  orig: 306, 308
+  offset: 20, 0
+  index: -1
+huaban/huaban01_10
+  rotate: true
+  xy: 2, 2
+  size: 375, 628
+  orig: 378, 669
+  offset: 2, 1
+  index: -1
+huaban/huaban01_11
+  rotate: true
+  xy: 632, 2
+  size: 375, 625
+  orig: 378, 669
+  offset: 2, 1
+  index: -1
+lizi/lizi1_11
+  rotate: false
+  xy: 1259, 299
+  size: 747, 425
+  orig: 750, 548
+  offset: 3, 14
+  index: -1
+lizi/lizi1_13
+  rotate: false
+  xy: 754, 726
+  size: 748, 429
+  orig: 750, 548
+  offset: 2, 15
+  index: -1
+lizi/lizi1_17
+  rotate: false
+  xy: 2, 1158
+  size: 750, 437
+  orig: 750, 548
+  offset: 0, 18
+  index: -1
+lizi/lizi1_19
+  rotate: false
+  xy: 754, 1157
+  size: 750, 441
+  orig: 750, 548
+  offset: 0, 19
+  index: -1
+lizi/lizi1_21
+  rotate: false
+  xy: 754, 1600
+  size: 750, 446
+  orig: 750, 548
+  offset: 0, 20
+  index: -1
+lizi/lizi1_23
+  rotate: false
+  xy: 2, 1597
+  size: 750, 449
+  orig: 750, 548
+  offset: 0, 22
+  index: -1
+lizi/lizi1_33
+  rotate: true
+  xy: 1506, 1014
+  size: 722, 453
+  orig: 750, 548
+  offset: 28, 49
+  index: -1
+lizi/lizi1_9
+  rotate: false
+  xy: 2, 379
+  size: 748, 423
+  orig: 750, 548
+  offset: 0, 11
+  index: -1
+shu001_0
+  rotate: false
+  xy: 1259, 9
+  size: 259, 288
+  orig: 276, 325
+  offset: 17, 37
+  index: -1
+shu002_0
+  rotate: false
+  xy: 1506, 1738
+  size: 454, 308
+  orig: 473, 329
+  offset: 19, 21
+  index: -1
+
+castle3.png
+size: 2034,1963
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+hua06_16
+  rotate: true
+  xy: 1852, 1820
+  size: 141, 151
+  orig: 179, 180
+  offset: 38, 11
+  index: -1
+huaban/huaban01_14
+  rotate: true
+  xy: 738, 1142
+  size: 376, 659
+  orig: 378, 669
+  offset: 1, 1
+  index: -1
+huaban/huaban01_15
+  rotate: true
+  xy: 2, 1136
+  size: 376, 655
+  orig: 378, 669
+  offset: 1, 1
+  index: -1
+huaban/huaban01_16
+  rotate: false
+  xy: 1474, 1301
+  size: 376, 660
+  orig: 378, 669
+  offset: 1, 8
+  index: -1
+huaban/huaban01_17
+  rotate: false
+  xy: 1399, 642
+  size: 376, 657
+  orig: 378, 669
+  offset: 1, 6
+  index: -1
+huaban/huaban01_18
+  rotate: true
+  xy: 659, 764
+  size: 376, 655
+  orig: 378, 669
+  offset: 1, 3
+  index: -1
+huaban/huaban01_3
+  rotate: true
+  xy: 2, 2
+  size: 376, 627
+  orig: 378, 669
+  offset: 1, 29
+  index: -1
+huaban/huaban01_4
+  rotate: true
+  xy: 2, 758
+  size: 376, 637
+  orig: 378, 669
+  offset: 1, 15
+  index: -1
+huaban/huaban01_5
+  rotate: true
+  xy: 641, 386
+  size: 376, 635
+  orig: 378, 669
+  offset: 1, 12
+  index: -1
+huaban/huaban01_6
+  rotate: true
+  xy: 2, 380
+  size: 376, 635
+  orig: 378, 669
+  offset: 1, 9
+  index: -1
+huaban/huaban01_7
+  rotate: false
+  xy: 1278, 6
+  size: 376, 634
+  orig: 378, 669
+  offset: 1, 6
+  index: -1
+huaban/huaban01_8
+  rotate: false
+  xy: 1656, 7
+  size: 376, 633
+  orig: 378, 669
+  offset: 1, 4
+  index: -1
+huaban/huaban01_9
+  rotate: true
+  xy: 639, 10
+  size: 374, 631
+  orig: 378, 669
+  offset: 3, 2
+  index: -1
+lizi/lizi1_29
+  rotate: false
+  xy: 738, 1520
+  size: 734, 441
+  orig: 750, 548
+  offset: 16, 48
+  index: -1
+lizi/lizi1_31
+  rotate: false
+  xy: 2, 1514
+  size: 734, 447
+  orig: 750, 548
+  offset: 16, 48
+  index: -1
+shitou_0
+  rotate: false
+  xy: 1852, 1699
+  size: 123, 119
+  orig: 134, 124
+  offset: 11, 0
+  index: -1
+
+castle4.png
+size: 1899,631
+format: RGBA8888
+filter: Linear,Linear
+repeat: none
+huaban/huaban01_0
+  rotate: false
+  xy: 377, 21
+  size: 369, 608
+  orig: 378, 669
+  offset: 7, 59
+  index: -1
+huaban/huaban01_1
+  rotate: false
+  xy: 2, 2
+  size: 373, 627
+  orig: 378, 669
+  offset: 1, 36
+  index: -1
+huaban/huaban01_19
+  rotate: false
+  xy: 1120, 41
+  size: 376, 588
+  orig: 378, 669
+  offset: 1, 66
+  index: -1
+huaban/huaban01_20
+  rotate: false
+  xy: 748, 23
+  size: 370, 606
+  orig: 378, 669
+  offset: 7, 63
+  index: -1
+lizi/lizi1_5
+  rotate: false
+  xy: 1498, 216
+  size: 399, 413
+  orig: 750, 548
+  offset: 0, 6
+  index: -1
