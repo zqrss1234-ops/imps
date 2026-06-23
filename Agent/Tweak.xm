@@ -625,40 +625,12 @@ static const char kRunKey = 0;
 static const char kMicKey = 0;
 static const char kSpdKey = 0;
 
-// tapMic - find the mic button inside LTLiveMikeFace and simulate tap
+// tapMic - call lt_mikeButtonAction: on LTLiveMikeFace (real method in YallaLite)
 static void _tapMic(id self, SEL _cmd) {
-    __block UIControl *bestBtn = nil;
-    void (^deepSearch)(UIView *) = ^(UIView *v) {
-        if (bestBtn) return;
-        if ([v isKindOfClass:[UIControl class]] && v != self) {
-            UIControl *c = (UIControl *)v;
-            if (c.allTargets.count > 0 || c.gestureRecognizers.count > 0) {
-                bestBtn = c;
-                return;
-            }
-        }
-        for (UIView *sv in v.subviews) deepSearch(sv);
-    };
-    deepSearch(self);
-    if (!bestBtn) {
-        // fallback: any UIControl
-        for (UIView *sv in self.subviews) {
-            if ([sv isKindOfClass:[UIControl class]]) { bestBtn = (UIControl *)sv; break; }
-        }
-    }
-    if (bestBtn) {
-        [bestBtn sendActionsForControlEvents:UIControlEventTouchUpInside];
-        // also try touching via target-action directly
-        NSSet *targets = bestBtn.allTargets;
-        for (id t in targets) {
-            NSArray *actions = [bestBtn actionsForTarget:t forControlEvent:UIControlEventTouchUpInside];
-            for (NSString *selName in actions) {
-                SEL s = NSSelectorFromString(selName);
-                if ([t respondsToSelector:s]) {
-                    ((void(*)(id,SEL,id))[t methodForSelector:s])(t, s, bestBtn);
-                }
-            }
-        }
+    SEL s = NSSelectorFromString(@"lt_mikeButtonAction:");
+    if ([self respondsToSelector:s]) {
+        // try with nil sender (most IBActions accept nil)
+        ((void(*)(id,SEL,id))[self methodForSelector:s])(self, s, nil);
     }
 }
 
@@ -711,10 +683,10 @@ static void _lt_rippleButtonAction(id self, SEL _cmd, id arg) {
 }
 
 static id _a9xView(id self, SEL _cmd) {
-    for (UIView *sv in [self subviews]) {
-        NSString *cn = NSStringFromClass([sv class]);
-        if ([cn containsString:@"A9X"] || [cn containsString:@"Avatar"] || [cn containsString:@"Face"])
-            return sv;
+    // Try the real mikeView property
+    SEL s = NSSelectorFromString(@"mikeView");
+    if ([self respondsToSelector:s]) {
+        return ((id(*)(id,SEL))[self methodForSelector:s])(self, s);
     }
     return nil;
 }
@@ -817,9 +789,14 @@ static void _setStatus(id self, SEL _cmd) {
 }
 
 static void _timerTick(id self, SEL _cmd) {
+    // Try the real lt_timerTick: method if it exists
+    SEL s = NSSelectorFromString(@"lt_timerTick:");
+    if ([self respondsToSelector:s]) {
+        ((void(*)(id,SEL,id))[self methodForSelector:s])(self, s, nil);
+    }
     id val = objc_getAssociatedObject(self, &kCxxKey);
     if ([val boolValue]) {
-        NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+        NSArray *mics = ensureMics(self);
         for (UIView *v in mics) {
             v.alpha = 0.15;
         }
