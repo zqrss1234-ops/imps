@@ -684,13 +684,14 @@ static id _isChatRoomTable(id self, SEL _cmd, id arg) {
 
 static void _lt_rippleButtonAction(id self, SEL _cmd, id arg) {
     BOOL on = [arg boolValue];
+    UIView *v = (UIView *)self;
     [UIView animateWithDuration:0.25 animations:^{
         if (on) {
-            self.transform = CGAffineTransformMakeScale(1.08, 1.08);
-            self.alpha = 0.7;
+            v.transform = CGAffineTransformMakeScale(1.08, 1.08);
+            v.alpha = 0.7;
         } else {
-            self.transform = CGAffineTransformIdentity;
-            self.alpha = 1.0;
+            v.transform = CGAffineTransformIdentity;
+            v.alpha = 1.0;
         }
     }];
 }
