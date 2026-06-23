@@ -586,6 +586,31 @@ static void ysHandler(NSException *e) {
     NSLog(@"[YA] %@: %@", e.name, e.reason);
 }
 
+static UIWindow *findKeyWindow(void) {
+    if (@available(iOS 13.0, *)) {
+        // iOS 13+: iterate scenes and find first window
+        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
+            if (s.activationState != UISceneActivationStateForegroundActive) continue;
+            UIWindowScene *ws = (UIWindowScene *)s;
+            for (UIWindow *w in ws.windows) {
+                if (w.isKeyWindow) return w;
+            }
+            // fallback: first non-hidden full-screen window
+            for (UIWindow *w in ws.windows) {
+                if (w.hidden || w.windowLevel > UIWindowLevelNormal) continue;
+                return w;
+            }
+            return ws.windows.firstObject;
+        }
+    }
+    // iOS 12 fallback
+    if ([UIApplication sharedApplication].keyWindow) return [UIApplication sharedApplication].keyWindow;
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow) return w;
+    }
+    return [UIApplication sharedApplication].windows.firstObject;
+}
+
 static void setupMasterUI(void) {
     if (s_overlay) return;
 
@@ -604,23 +629,12 @@ static void setupMasterUI(void) {
         }
     }
 
-    s_overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
-    s_overlay.windowLevel = UIWindowLevelAlert;
-    s_overlay.backgroundColor = [UIColor clearColor];
-    s_overlay.userInteractionEnabled = YES;
-    s_overlay.rootViewController = [[UIViewController alloc] init];
-    s_overlay.rootViewController.view.backgroundColor = [UIColor clearColor];
-    s_overlay.rootViewController.view.userInteractionEnabled = NO;
-
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                s_overlay.windowScene = (UIWindowScene *)scene;
-                break;
-            }
-        }
+    s_overlay = findKeyWindow();
+    if (!s_overlay) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+            dispatch_get_main_queue(), ^{ setupMasterUI(); });
+        return;
     }
-    [s_overlay makeKeyAndVisible];
 
 #ifdef YM_DIRECT
     [s_agent buildUI];
