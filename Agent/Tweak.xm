@@ -627,24 +627,38 @@ static const char kSpdKey = 0;
 
 // tapMic - find the mic button inside LTLiveMikeFace and simulate tap
 static void _tapMic(id self, SEL _cmd) {
-    UIView *best = nil;
-    for (UIView *sv in [self subviews]) {
-        if ([sv isKindOfClass:[UIButton class]]) { best = sv; break; }
-        if ([sv isKindOfClass:[UIControl class]]) { best = sv; }
+    __block UIControl *bestBtn = nil;
+    void (^deepSearch)(UIView *) = ^(UIView *v) {
+        if (bestBtn) return;
+        if ([v isKindOfClass:[UIControl class]] && v != self) {
+            UIControl *c = (UIControl *)v;
+            if (c.allTargets.count > 0 || c.gestureRecognizers.count > 0) {
+                bestBtn = c;
+                return;
+            }
+        }
+        for (UIView *sv in v.subviews) deepSearch(sv);
+    };
+    deepSearch(self);
+    if (!bestBtn) {
+        // fallback: any UIControl
+        for (UIView *sv in self.subviews) {
+            if ([sv isKindOfClass:[UIControl class]]) { bestBtn = (UIControl *)sv; break; }
+        }
     }
-    if (!best) {
-        // deeper search
-        __block UIView *btn = nil;
-        void (^search)(UIView *) = ^(UIView *v) {
-            if (btn) return;
-            if ([v isKindOfClass:[UIButton class]]) { btn = v; return; }
-            for (UIView *sv in v.subviews) search(sv);
-        };
-        search(self);
-        best = btn;
-    }
-    if (best && [best respondsToSelector:@selector(sendActionsForControlEvents:)]) {
-        [(UIControl *)best sendActionsForControlEvents:UIControlEventTouchUpInside];
+    if (bestBtn) {
+        [bestBtn sendActionsForControlEvents:UIControlEventTouchUpInside];
+        // also try touching via target-action directly
+        NSSet *targets = bestBtn.allTargets;
+        for (id t in targets) {
+            NSArray *actions = [bestBtn actionsForTarget:t forControlEvent:UIControlEventTouchUpInside];
+            for (NSString *selName in actions) {
+                SEL s = NSSelectorFromString(selName);
+                if ([t respondsToSelector:s]) {
+                    ((void(*)(id,SEL,id))[t methodForSelector:s])(t, s, bestBtn);
+                }
+            }
+        }
     }
 }
 
@@ -722,10 +736,19 @@ static void _scanResult(id self, SEL _cmd, id arg1, id arg2) {
     objc_setAssociatedObject(self, &kMicsKey, mics, OBJC_ASSOCIATION_RETAIN);
 }
 
+static NSArray *ensureMics(id self) {
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    if (!mics || mics.count == 0) {
+        _scanResult(self, NULL, nil, nil);
+        mics = objc_getAssociatedObject(self, &kMicsKey);
+    }
+    return mics;
+}
+
 // d6s:result: - toggle cxx on stored mics
 static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
     BOOL on = [arg1 boolValue];
-    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    NSArray *mics = ensureMics(self);
     CGFloat a = on ? 0.3 : 1.0;
     for (UIView *v in mics) {
         v.alpha = a;
@@ -736,7 +759,7 @@ static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
 
 static void _c7rsResult(id self, SEL _cmd, id arg1, id arg2) {
     BOOL on = [arg1 boolValue];
-    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    NSArray *mics = ensureMics(self);
     for (UIView *v in mics) {
         v.alpha = on ? 0.2 : 1.0;
         v.userInteractionEnabled = !on;
@@ -744,7 +767,7 @@ static void _c7rsResult(id self, SEL _cmd, id arg1, id arg2) {
 }
 
 static void _cxxNoSync(id self, SEL _cmd) {
-    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    NSArray *mics = ensureMics(self);
     for (UIView *v in mics) {
         v.userInteractionEnabled = NO;
         v.alpha = 0.15;
@@ -752,7 +775,7 @@ static void _cxxNoSync(id self, SEL _cmd) {
 }
 
 static void _safeCxxNoSync(id self, SEL _cmd) {
-    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    NSArray *mics = ensureMics(self);
     for (UIView *v in mics) {
         v.userInteractionEnabled = NO;
         v.alpha = 0.25;
