@@ -585,16 +585,17 @@ static void hook_didMoveToWindow(id self, SEL _cmd) {
         && ![cn containsString:@"YallaCall"]) return;
     s_setupAttempted = YES;
     UIView *v = self;
-    UIWindowScene *sc = nil;
-    if (@available(iOS 13.0, *)) {
-        sc = v.window.windowScene;
-        if (!sc) sc = (id)[UIApplication sharedApplication].connectedScenes.anyObject;
-    }
-    dispatch_async(dispatch_get_main_queue(), ^{ createOverlay(sc); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+        id sc = nil;
+        if (@available(iOS 13.0, *)) {
+            sc = v.window.windowScene;
+        }
+        createOverlay(sc);
+    });
 }
 
 // --- create overlay window ---
-static void createOverlay(UIWindowScene *scene) {
+static void createOverlay(id scene) {
     if (s_overlay) return;
     s_overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
     s_overlay.windowLevel = UIWindowLevelAlert;
@@ -621,11 +622,14 @@ static void fallbackSetup(void) {
     UIView *face = findLiveMikeFace();
     if (face) {
         s_setupAttempted = YES;
-        UIWindowScene *sc = nil;
-        if (@available(iOS 13.0, *)) {
-            sc = face.window.windowScene;
-        }
-        dispatch_async(dispatch_get_main_queue(), ^{ createOverlay(sc); });
+        __block UIView *bface = face;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            id sc = nil;
+            if (@available(iOS 13.0, *)) {
+                sc = bface.window.windowScene;
+            }
+            createOverlay(sc);
+        });
     } else {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
             dispatch_get_main_queue(), ^{ fallbackSetup(); });
