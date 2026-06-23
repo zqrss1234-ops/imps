@@ -616,6 +616,250 @@ static void ysHandler(NSException *e) {
     NSLog(@"[YA] %@: %@", e.name, e.reason);
 }
 
+// ==================== LTLiveMikeFace methods ====================
+// These are added via class_addMethod so the Slave code's callSel works.
+// Associated object keys
+static const char kMicsKey = 0;
+static const char kCxxKey = 0;
+static const char kRunKey = 0;
+static const char kMicKey = 0;
+static const char kSpdKey = 0;
+
+// tapMic - find the mic button inside LTLiveMikeFace and simulate tap
+static void _tapMic(id self, SEL _cmd) {
+    UIView *best = nil;
+    for (UIView *sv in [self subviews]) {
+        if ([sv isKindOfClass:[UIButton class]]) { best = sv; break; }
+        if ([sv isKindOfClass:[UIControl class]]) { best = sv; }
+    }
+    if (!best) {
+        // deeper search
+        __block UIView *btn = nil;
+        void (^search)(UIView *) = ^(UIView *v) {
+            if (btn) return;
+            if ([v isKindOfClass:[UIButton class]]) { btn = v; return; }
+            for (UIView *sv in v.subviews) search(sv);
+        };
+        search(self);
+        best = btn;
+    }
+    if (best && [best respondsToSelector:@selector(sendActionsForControlEvents:)]) {
+        [(UIControl *)best sendActionsForControlEvents:UIControlEventTouchUpInside];
+    }
+}
+
+static void _tapOnce(id self, SEL _cmd) {
+    objc_setAssociatedObject(self, &kMicKey, @(1), OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _selectMic(id self, SEL _cmd, id arg) {
+    objc_setAssociatedObject(self, &kMicKey, arg, OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _setm6b(id self, SEL _cmd, id arg) {
+    objc_setAssociatedObject(self, &kRunKey, arg, OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _masterSetRunUIOnly(id self, SEL _cmd, id arg) {
+    objc_setAssociatedObject(self, &kRunKey, arg, OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _toggleRun(id self, SEL _cmd) {
+    id val = objc_getAssociatedObject(self, &kRunKey);
+    BOOL on = [val boolValue];
+    objc_setAssociatedObject(self, &kRunKey, @(!on), OBJC_ASSOCIATION_RETAIN);
+}
+
+static id _isChatRoomTable(id self, SEL _cmd, id arg) {
+    UIView *v = self;
+    while (v) {
+        if ([v isKindOfClass:[UITableView class]] || [v isKindOfClass:[UICollectionView class]])
+            return @(YES);
+        if ([NSStringFromClass([v class]) containsString:@"ChatRoom"])
+            return @(YES);
+        v = [v superview];
+    }
+    return @(NO);
+}
+
+static void _lt_rippleButtonAction(id self, SEL _cmd, id arg) {
+    BOOL on = [arg boolValue];
+    [UIView animateWithDuration:0.25 animations:^{
+        if (on) {
+            self.transform = CGAffineTransformMakeScale(1.08, 1.08);
+            self.alpha = 0.7;
+        } else {
+            self.transform = CGAffineTransformIdentity;
+            self.alpha = 1.0;
+        }
+    }];
+}
+
+static id _a9xView(id self, SEL _cmd) {
+    for (UIView *sv in [self subviews]) {
+        NSString *cn = NSStringFromClass([sv class]);
+        if ([cn containsString:@"A9X"] || [cn containsString:@"Avatar"] || [cn containsString:@"Face"])
+            return sv;
+    }
+    return nil;
+}
+
+// scan:result: - scan hierarchy for mic faces, store in associated array
+static void _scanResult(id self, SEL _cmd, id arg1, id arg2) {
+    NSMutableArray *mics = [NSMutableArray array];
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (!w || w.hidden) continue;
+        void (^search)(UIView *) = ^(UIView *v) {
+            if (!v) return;
+            if (v != self && ([NSStringFromClass([v class]) containsString:@"LTLiveMikeFace"] ||
+                [NSStringFromClass([v class]) containsString:@"LiveMikeFace"]))
+                [mics addObject:v];
+            for (UIView *sv in v.subviews) search(sv);
+        };
+        search(w);
+    }
+    objc_setAssociatedObject(self, &kMicsKey, mics, OBJC_ASSOCIATION_RETAIN);
+}
+
+// d6s:result: - toggle cxx on stored mics
+static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
+    BOOL on = [arg1 boolValue];
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    CGFloat a = on ? 0.3 : 1.0;
+    for (UIView *v in mics) {
+        v.alpha = a;
+        v.userInteractionEnabled = !on;
+    }
+    objc_setAssociatedObject(self, &kCxxKey, @(on), OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _c7rsResult(id self, SEL _cmd, id arg1, id arg2) {
+    BOOL on = [arg1 boolValue];
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    for (UIView *v in mics) {
+        v.alpha = on ? 0.2 : 1.0;
+        v.userInteractionEnabled = !on;
+    }
+}
+
+static void _cxxNoSync(id self, SEL _cmd) {
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    for (UIView *v in mics) {
+        v.userInteractionEnabled = NO;
+        v.alpha = 0.15;
+    }
+}
+
+static void _safeCxxNoSync(id self, SEL _cmd) {
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    for (UIView *v in mics) {
+        v.userInteractionEnabled = NO;
+        v.alpha = 0.25;
+    }
+}
+
+// Two-letter property methods - store/retrieve from associated objects
+static id _w6m(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
+static void _setW6m(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
+static id _x5n(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
+static void _setX5n(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
+static id _y4o(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
+static void _setY4o(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
+static id _e5t(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
+static void _setE5t(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
+static id _f4u(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
+static void _setF4u(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
+
+// g3v: / q2f: / u8k: / v7l: - state methods
+static id _g3v(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(g3v:)); }
+static void _setG3v(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(g3v:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _q2f(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(q2f:)); }
+static void _setQ2f(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(q2f:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _u8k(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(u8k:)); }
+static void _setU8k(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(u8k:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _v7l(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(v7l:)); }
+static void _setV7l(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(v7l:), arg, OBJC_ASSOCIATION_RETAIN); }
+
+static void _setSpeed(id self, SEL _cmd, id arg) {
+    objc_setAssociatedObject(self, &kSpdKey, arg, OBJC_ASSOCIATION_RETAIN);
+}
+
+static void _changeSpeed(id self, SEL _cmd) {
+    // just a trigger - state already stored
+}
+
+static void _setStatus(id self, SEL _cmd) {
+    // no-op
+}
+
+static void _timerTick(id self, SEL _cmd) {
+    id val = objc_getAssociatedObject(self, &kCxxKey);
+    if ([val boolValue]) {
+        NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+        for (UIView *v in mics) {
+            v.alpha = 0.15;
+        }
+    }
+}
+
+static id _normalizedDigits(id self, SEL _cmd, id arg) {
+    NSString *s = arg;
+    s = [s stringByReplacingOccurrencesOfString:@"-" withString:@""];
+    s = [s stringByReplacingOccurrencesOfString:@" " withString:@""];
+    return s;
+}
+
+static void setupMFMethods(Class mf) {
+    // Each add: (SEL name, IMP func, type encoding)
+    #define ADDM(_sel, _imp, _enc) class_addMethod(mf, @selector(_sel), (IMP)_imp, _enc)
+
+    // Two-letter property accessors
+    ADDM(w6m, _w6m, "@@:");
+    ADDM(setW6m:, _setW6m, "v@:@");
+    ADDM(x5n, _x5n, "@@:");
+    ADDM(setX5n:, _setX5n, "v@:@");
+    ADDM(y4o, _y4o, "@@:");
+    ADDM(setY4o:, _setY4o, "v@:@");
+    ADDM(e5t, _e5t, "@@:");
+    ADDM(setE5t:, _setE5t, "v@:@");
+    ADDM(f4u, _f4u, "@@:");
+    ADDM(setF4u:, _setF4u, "v@:@");
+
+    // State methods
+    ADDM(g3v:, _g3v, "@@:@");
+    ADDM(setG3v:, _setG3v, "v@:@");
+    ADDM(q2f:, _q2f, "@@:@");
+    ADDM(setQ2f:, _setQ2f, "v@:@");
+    ADDM(u8k:, _u8k, "@@:@");
+    ADDM(setU8k:, _setU8k, "v@:@");
+    ADDM(v7l:, _v7l, "@@:@");
+    ADDM(setV7l:, _setV7l, "v@:@");
+
+    // Core functionality
+    ADDM(tapMic, _tapMic, "v@:");
+    ADDM(tapOnce, _tapOnce, "v@:");
+    ADDM(selectMic:, _selectMic, "v@:@");
+    ADDM(setm6b:, _setm6b, "v@:@");
+    ADDM(masterSetRunUIOnly:, _masterSetRunUIOnly, "v@:@");
+    ADDM(toggleRun, _toggleRun, "v@:");
+    ADDM(isChatRoomTable:, _isChatRoomTable, "@@:@");
+    ADDM(lt_rippleButtonAction:, _lt_rippleButtonAction, "v@:@");
+    ADDM(a9xView, _a9xView, "@@:");
+    ADDM(scan:result:, _scanResult, "v@:@@");
+    ADDM(d6s:result:, _d6sResult, "v@:@@");
+    ADDM(c7rs:result:, _c7rsResult, "v@:@@");
+    ADDM(c7rsInsideChatOnly:result:, _c7rsResult, "v@:@@");
+    ADDM(cxxNoSync, _cxxNoSync, "v@:");
+    ADDM(safeCxxNoSync, _safeCxxNoSync, "v@:");
+
+    // Speed / status
+    ADDM(setSpeed:, _setSpeed, "v@:@");
+    ADDM(changeSpeed, _changeSpeed, "v@:");
+    ADDM(setStatus, _setStatus, "v@:");
+    ADDM(timerTick, _timerTick, "v@:");
+    ADDM(normalizedDigits:, _normalizedDigits, "@@:@");
+}
+
 static UIWindow *findKeyWindow(void) {
     if (@available(iOS 13.0, *)) {
         // iOS 13+: iterate scenes and find first window
@@ -677,6 +921,10 @@ __attribute__((constructor)) static void init() {
     @autoreleasepool {
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
         if (![bid isEqualToString:kYallaBundle] && ![bid hasPrefix:kYallaBundle]) return;
+
+        // Add LTLiveMikeFace methods so Slave code can call them
+        Class mf = NSClassFromString(@"LTLiveMikeFace");
+        if (mf) setupMFMethods(mf);
 
         s_instanceId = getInstanceId();
         s_isMain = [bid isEqualToString:kYallaBundle];
