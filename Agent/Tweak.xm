@@ -1,6 +1,11 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <CommonCrypto/CommonCrypto.h>
+
+#define kLicensePath @"/var/mobile/Library/Preferences/com.yalla.liteagent.license.plist"
+#define kAPIBase @"https://prooffa3zshbabe.dev/api"
+#define kAPIToken @"p9xA-7LmQ-yla-lite-2026"
 
 #define kYallaBundle @"com.yalla.yallalite"
 #define kNotifyPrefix @"com.yalla.liteagent.cmd."
@@ -38,6 +43,7 @@ static UIWindow *s_overlay = nil;
 static UIView *s_panel = nil;
 static UIView *s_passView = nil;
 static UITextField *s_passField = nil;
+static NSString *s_passCode = nil;
 static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
 static UIButton *s_onBtn = nil;
 static NSMutableArray *s_nums = nil;
@@ -45,6 +51,127 @@ static UIView *s_circle = nil;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
+}
+
+// Hook function pointers
+static UIWindow *findKeyWindow(void);
+static IMP s_orig_didMoveToWindow = NULL;
+static IMP s_orig_viewDidAppear = NULL;
+
+static void hook_viewDidAppear(id self, SEL _cmd, BOOL animated) {
+    ((void(*)(id,SEL,BOOL))s_orig_viewDidAppear)(self, _cmd, animated);
+    // Cache the key window for overlay use
+    if (!s_overlay) {
+        s_overlay = findKeyWindow();
+    }
+}
+
+static void hook_didMoveToWindow(id self, SEL _cmd) {
+    ((void(*)(id,SEL))s_orig_didMoveToWindow)(self, _cmd);
+    if (!self) return;
+    NSString *cn = NSStringFromClass([self class]);
+    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) {
+        s_micFace = self;
+    }
+}
+
+static void setupHooks(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        // Hook UIView.didMoveToWindow
+        Method m1 = class_getInstanceMethod([UIView class], @selector(didMoveToWindow));
+        if (m1) {
+            s_orig_didMoveToWindow = method_getImplementation(m1);
+            method_setImplementation(m1, (IMP)hook_didMoveToWindow);
+        }
+        // Hook UIViewController.viewDidAppear:
+        Method m2 = class_getInstanceMethod([UIViewController class], @selector(viewDidAppear:));
+        if (m2) {
+            s_orig_viewDidAppear = method_getImplementation(m2);
+            method_setImplementation(m2, (IMP)hook_viewDidAppear);
+        }
+    });
+}
+
+static NSString *deviceHash(void) {
+    NSString *uuid = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+    NSString *input = [NSString stringWithFormat:@"%@-%@", uuid, kAPIToken];
+    const char *cStr = [input UTF8String];
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(cStr, (CC_LONG)strlen(cStr), digest);
+    NSMutableString *hash = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH*2];
+    for (int i = 0; i < CC_SHA256_DIGEST_LENGTH; i++)
+        [hash appendFormat:@"%02x", digest[i]];
+    return hash;
+}
+
+static NSDictionary *savedLicense(void) {
+    return [NSDictionary dictionaryWithContentsOfFile:kLicensePath];
+}
+
+static void saveLicense(NSDictionary *dict) {
+    NSString *dir = [kLicensePath stringByDeletingLastPathComponent];
+    [[NSFileManager defaultManager] createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    [dict writeToFile:kLicensePath atomically:YES];
+}
+
+static void activateLicense(NSString *code, void(^completion)(BOOL success, NSString *error)) {
+    NSString *bundle = [[NSBundle mainBundle] bundleIdentifier];
+    NSString *model = [[UIDevice currentDevice] model];
+    NSString *iosVer = [[UIDevice currentDevice] systemVersion];
+    NSString *hash = deviceHash();
+    NSString *profile = [NSMutableString stringWithString:@"PROF-XXXX-XXXX"];
+
+    NSDictionary *body = @{
+        @"bundle_id": bundle ?: @"",
+        @"device_hash": hash ?: @"",
+        @"device_model": model ?: @"",
+        @"ios_version": iosVer ?: @"",
+        @"code": code ?: @"",
+        @"prof": profile
+    };
+
+    NSError *jsonErr = nil;
+    NSData *jsonData = [NSJSONSerialization dataWithJSONObject:body options:0 error:&jsonErr];
+    if (!jsonData) {
+        if (completion) completion(NO, @"network_error");
+        return;
+    }
+
+    NSURL *url = [NSURL URLWithString:kAPIBase];
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    [req setHTTPMethod:@"POST"];
+    [req setValue:@"application/json" forHTTPHeaderField:@"content-type"];
+    [req setValue:kAPIToken forHTTPHeaderField:@"Authorization"];
+    [req setTimeoutInterval:15];
+    [req setHTTPBody:jsonData];
+
+    [[[NSURLSession sharedSession] dataTaskWithRequest:req completionHandler:^(NSData *data, NSURLResponse *resp, NSError *err) {
+        if (err) {
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO, @"network_error"); });
+            return;
+        }
+        if (!data) {
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO, @"network_error"); });
+            return;
+        }
+        NSError *parseErr = nil;
+        NSDictionary *json = [NSJSONSerialization JSONObjectWithData:data options:0 error:&parseErr];
+        if (!json) {
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO, @"unknown"); });
+            return;
+        }
+        NSString *status = json[@"status"] ?: json[@"code"];
+        if ([status isEqualToString:@"invalid_code"] || [status isEqualToString:@"missing_code"] ||
+            [status isEqualToString:@"device_mismatch"] || [status isEqualToString:@"expired"] ||
+            [status isEqualToString:@"revoked"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(NO, status); });
+            return;
+        }
+        // Save full response as license
+        saveLicense(json);
+        dispatch_async(dispatch_get_main_queue(), ^{ if (completion) completion(YES, nil); });
+    }] resume];
 }
 
 static void postCmd(NSString *cmd) {
@@ -159,20 +286,38 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 
 - (void)submitPass {
     NSString *code = s_passField.text ?: @"";
-    if (![code isEqualToString:@"515"]) {
-        UIColor *orig = s_passField.backgroundColor;
-        s_passField.backgroundColor = clr(255,51,51,0.5);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250000000), dispatch_get_main_queue(), ^{
-            s_passField.backgroundColor = orig;
-        });
-        s_passField.text = @"";
-        return;
-    }
+    if (code.length == 0) return;
     [s_passField resignFirstResponder];
-    s_passField = nil;
-    [s_passView removeFromSuperview];
-    s_passView = nil;
-    [self buildUI];
+
+    // Show loading
+    NSString *orig = s_passField.placeholder;
+    s_passField.placeholder = @"جاري التفعيل...";
+    s_passField.text = @"";
+    s_passField.userInteractionEnabled = NO;
+    s_passField.backgroundColor = clr(30, 45, 90, 0.5);
+
+    // Save code for reference
+    s_passCode = [code copy];
+
+    activateLicense(code, ^(BOOL success, NSString *error) {
+        if (success) {
+            [s_passField removeFromSuperview];
+            s_passField = nil;
+            [s_passView removeFromSuperview];
+            s_passView = nil;
+            [self buildUI];
+        } else {
+            s_passField.text = @"";
+            s_passField.placeholder = orig;
+            s_passField.userInteractionEnabled = YES;
+            s_passField.backgroundColor = clr(30, 45, 90, 0.9);
+            UIColor *red = clr(255,51,51,0.5);
+            s_passField.backgroundColor = red;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 500000000), dispatch_get_main_queue(), ^{
+                s_passField.backgroundColor = clr(30, 45, 90, 0.9);
+            });
+        }
+    });
 }
 
 - (void)buildUI {
@@ -653,6 +798,7 @@ __attribute__((constructor)) static void init() {
 
         NSSetUncaughtExceptionHandler(&ysHandler);
 
+        // Register Darwin notification observers
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), NULL, onNotify,
             NULL, NULL,
@@ -662,12 +808,32 @@ __attribute__((constructor)) static void init() {
             NULL, NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
+        // Set up method hooks for view lifecycle
+        setupHooks();
+
         s_agent = [[YA alloc] init];
 
         if (s_isMain) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                setupMasterUI();
-            });
+            // Check saved license
+            NSDictionary *license = savedLicense();
+            if (license && license[@"bundle"]) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    s_overlay = findKeyWindow();
+                    if (s_overlay) {
+                        [s_agent buildUI];
+                    } else {
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                            dispatch_get_main_queue(), ^{
+                            s_overlay = findKeyWindow();
+                            if (s_overlay) [s_agent buildUI];
+                        });
+                    }
+                });
+            } else {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    setupMasterUI();
+                });
+            }
         }
 
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{

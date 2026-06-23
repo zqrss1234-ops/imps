@@ -10,6 +10,6 @@ TWEAK_NAME = YallaAgent
 
 YallaAgent_FILES = Tweak.xm
 YallaAgent_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -fno-logos
-YallaAgent_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
+YallaAgent_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore Security
 
 include $(THEOS_MAKE_PATH)/tweak.mk
