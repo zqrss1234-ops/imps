@@ -12,9 +12,7 @@ static NSString *const kNames[] = {
 };
 #define kNamesCount 8
 static const int kMsVals[] = {50, 25, 10, 5, 1};
-static int kMsValsLen = 5;
 
-// State
 static int s_instanceId = 0;
 static BOOL s_isMain = NO;
 
@@ -32,48 +30,28 @@ static int s_cxxCount = 0;
 static int s_slvMsIdx = 2;
 static BOOL s_slvLite = NO;
 static BOOL s_slvCxx = NO;
-static BOOL s_slvSafeCxx = NO;
 static __weak UIView *s_micFace = nil;
 static dispatch_source_t s_timer = NULL;
 
 // UI
-static UIView *s_panel;
-static UIView *s_passView;
-static UITextField *s_passField;
-static UILabel *s_st, *s_msL, *s_cxxL, *s_liteL;
-static UIButton *s_onBtn;
-static NSMutableArray *s_nums;
-static UIView *s_circle;
-static BOOL s_visible = YES;
-
-static id s_agent = nil;
+static UIWindow *s_overlay = nil;
+static UIView *s_panel = nil;
+static UIView *s_passView = nil;
+static UITextField *s_passField = nil;
+static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
+static UIButton *s_onBtn = nil;
+static NSMutableArray *s_nums = nil;
+static UIView *s_circle = nil;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
 }
 
-static UIWindow *mainWindow(void) {
-    if (@available(iOS 13, *)) {
-        NSSet *scenes = [UIApplication sharedApplication].connectedScenes;
-        for (UIScene *scene in scenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                UIWindowScene *ws = (UIWindowScene *)scene;
-                for (UIWindow *w in ws.windows) {
-                    if (w.isKeyWindow) return w;
-                }
-                return ws.windows.firstObject;
-            }
-        }
-    }
-    return [UIApplication sharedApplication].keyWindow;
-}
-
 static void postCmd(NSString *cmd) {
-    NSString *name = [kNotifyPrefix stringByAppendingString:cmd];
-    NSLog(@"postCommand %@", name);
     CFNotificationCenterPostNotification(
         CFNotificationCenterGetDarwinNotifyCenter(),
-        (__bridge CFStringRef)name, NULL, NULL, YES);
+        (__bridge CFStringRef)[kNotifyPrefix stringByAppendingString:cmd],
+        NULL, NULL, YES);
 }
 
 static int getInstanceId(void) {
@@ -84,95 +62,50 @@ static int getInstanceId(void) {
 
 static UIView *findLiveMikeFace(void) {
     if (s_micFace) return s_micFace;
-    UIWindow *kw = mainWindow();
-    if (!kw) return nil;
-    __block UIView *found = nil;
-    void (^search)(UIView *) = ^(UIView *v) {
-        if (found) return;
-        NSString *cn = NSStringFromClass([v class]);
-        if ([cn containsString:@"LTLivemikeFace"] || [cn containsString:@"LiveMikeFace"]) { found = v; return; }
-        for (UIView *sv in v.subviews) search(sv);
-    };
-    search(kw);
-    if (found) s_micFace = found;
-    return found;
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        __block UIView *found = nil;
+        void (^search)(UIView *) = ^(UIView *v) {
+            if (found) return;
+            NSString *cn = NSStringFromClass([v class]);
+            if ([cn containsString:@"LTLivemikeFace"] || [cn containsString:@"LiveMikeFace"]) { found = v; return; }
+            for (UIView *sv in v.subviews) search(sv);
+        };
+        search(w);
+        if (found) { s_micFace = found; return found; }
+    }
+    return nil;
 }
 
-static void callSel(id obj, NSString *selName, id arg1, id arg2) {
+static void callSel(id obj, NSString *selName, id a1, id a2) {
     @try {
         SEL s = NSSelectorFromString(selName);
         if ([obj respondsToSelector:s]) {
-            if (arg2) ((void (*)(id, SEL, id, id))[obj methodForSelector:s])(obj, s, arg1, arg2);
-            else if (arg1) ((void (*)(id, SEL, id))[obj methodForSelector:s])(obj, s, arg1);
-            else ((void (*)(id, SEL))[obj methodForSelector:s])(obj, s);
+            if (a2) ((void(*)(id,SEL,id,id))[obj methodForSelector:s])(obj,s,a1,a2);
+            else if (a1) ((void(*)(id,SEL,id))[obj methodForSelector:s])(obj,s,a1);
+            else ((void(*)(id,SEL))[obj methodForSelector:s])(obj,s);
         }
-    } @catch (NSException *e) {}
+    } @catch(NSException *e) {}
 }
 
-static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, CGFloat fs) {
-    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
-    lb.text = t;
-    lb.textColor = [UIColor whiteColor];
-    lb.font = [UIFont boldSystemFontOfSize:fs];
-    lb.textAlignment = NSTextAlignmentCenter;
-    lb.userInteractionEnabled = NO;
-    return lb;
-}
-
-static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
-    UIView *v = [[UIView alloc] initWithFrame:CGRectMake(x, y, w, 1)];
-    v.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
-    return v;
-}
-
-@interface YA : NSObject
-- (void)upd;
-- (void)num:(UIButton *)b;
-- (void)onT;
-- (void)msT;
-- (void)cxxT;
-- (void)liteT;
-- (void)showPanel;
-- (void)hideT;
-- (void)submitPass;
-- (void)buildUI;
-- (void)panPanel:(UIPanGestureRecognizer *)g;
-- (void)panCircle:(UIPanGestureRecognizer *)g;
-- (void)showPass;
-- (void)slvToggleLite:(BOOL)on;
-- (void)slvCxxFreeze;
-- (void)slvCxxSafeFreeze;
-- (void)slvCxxUnfreeze;
-- (void)slvSetMicOn:(int)slot;
-- (void)slvSetMicOff:(int)slot;
-- (void)slvSetSpeed:(int)ms;
-- (void)slvStartTimer:(int)ms;
-- (void)slvRunOn;
-- (void)slvRunOff;
-- (void)slvHandleCmd:(NSString *)cmd;
-@end
-
+@interface YA : NSObject @end
 @implementation YA
 
 - (void)upd {
-    NSString *s = s_sel >= 0 ? kNames[s_sel] : @"None";
+    NSString *s = (s_sel >= 1 && s_sel <= kNamesCount) ? kNames[s_sel - 1] : @"None";
     NSString *status = s_on ? @"ON" : @"OFF";
-    NSString *liteSuf = s_lite ? [NSString stringWithFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver] : @"";
-    NSString *cxxSuf = s_cxx ? [NSString stringWithFormat:@" | cxx✓ %d", s_cxxCount] : @"";
-    s_st.text = [NSString stringWithFormat:@"%@ | %@ | Mic %d | %dms%@%@",
-        s, status, s_sel + 1, kMsVals[s_msIdx], liteSuf, cxxSuf];
-
-    if (s_lite) s_liteL.text = [NSString stringWithFormat:@"LiTE %d/%d", s_slaveCount, s_totalEver];
-    else s_liteL.text = @"LiTE";
-    if (s_cxx) s_cxxL.text = [NSString stringWithFormat:@"cxx %d", s_cxxCount];
-    else s_cxxL.text = @"cxx";
+    NSMutableString *m = [NSMutableString stringWithFormat:@"%@ | %@ | Mic %d | %dms",
+        s, status, s_sel, kMsVals[s_msIdx]];
+    if (s_lite) [m appendFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver];
+    if (s_cxx) [m appendFormat:@" | cxx✓ %d", s_cxxCount];
+    s_st.text = m;
+    s_liteL.text = s_lite ? [NSString stringWithFormat:@"LiTE %d/%d", s_slaveCount, s_totalEver] : @"LiTE";
+    s_cxxL.text = s_cxx ? [NSString stringWithFormat:@"cxx %d", s_cxxCount] : @"cxx";
 }
 
 - (void)num:(UIButton *)b {
     if (s_on) return;
-    int idx = (int)b.tag;
-    s_sel = idx;
-    for (UIButton *nb in s_nums) nb.selected = (nb.tag == idx);
+    s_sel = (int)b.tag;
+    for (UIButton *nb in s_nums) nb.selected = (nb.tag == s_sel);
     [self upd];
 }
 
@@ -213,16 +146,14 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [self upd];
 }
 
+- (void)hideT {
+    s_panel.hidden = YES;
+    s_circle.hidden = NO;
+}
+
 - (void)showPanel {
     s_panel.hidden = NO;
     s_circle.hidden = YES;
-    s_visible = YES;
-}
-
-- (void)hideT {
-    s_visible = NO;
-    s_panel.hidden = YES;
-    s_circle.hidden = NO;
 }
 
 - (void)submitPass {
@@ -230,7 +161,7 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     if (![code isEqualToString:@"515"]) {
         UIColor *orig = s_passField.backgroundColor;
         s_passField.backgroundColor = clr(255,51,51,0.5);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 250000000), dispatch_get_main_queue(), ^{
             s_passField.backgroundColor = orig;
         });
         s_passField.text = @"";
@@ -244,22 +175,15 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
 }
 
 - (void)buildUI {
-    UIWindow *kw = mainWindow();
-    if (!kw) return;
-    UIView *cv = kw.rootViewController.view;
-    if (!cv) return;
-
     CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat PW = 340;
-    if (sw < PW + 16) PW = sw - 16;
+    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
+    CGFloat PW = sw < 356 ? sw - 16 : 340;
     CGFloat PX = (sw - PW) / 2;
     CGFloat PY = 120;
 
     s_panel = [[UIView alloc] initWithFrame:CGRectMake(PX, PY, PW, 230)];
-    s_panel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.92];
+    s_panel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.95];
     s_panel.layer.cornerRadius = 18;
-    s_panel.layer.borderWidth = 2;
-    s_panel.layer.borderColor = [UIColor blackColor].CGColor;
     s_panel.clipsToBounds = YES;
     s_panel.tag = 999;
 
@@ -268,115 +192,107 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     for (int i = 0; i < kNamesCount; i++) {
         if (i > 0) [as appendAttributedString:[[NSAttributedString alloc] initWithString:@"  "]];
         [as appendAttributedString:[[NSAttributedString alloc]
-            initWithString:kNames[i]
-            attributes:@{
+            initWithString:kNames[i] attributes:@{
                 NSFontAttributeName: [UIFont boldSystemFontOfSize:10],
                 NSForegroundColorAttributeName: [UIColor whiteColor]
             }]];
     }
-    UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, PW - 20, 20)];
+    UILabel *nl = [[UILabel alloc] initWithFrame:CGRectMake(10, 8, PW-20, 20)];
     nl.attributedText = as;
     nl.textAlignment = NSTextAlignmentCenter;
     nl.adjustsFontSizeToFitWidth = YES;
     nl.minimumScaleFactor = 0.4;
     [s_panel addSubview:nl];
-    [s_panel addSubview:mkSep(0, 32, PW)];
+
+    UIView *sep1 = [[UIView alloc] initWithFrame:CGRectMake(0, 32, PW, 1)];
+    sep1.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
+    [s_panel addSubview:sep1];
 
     // Numbers 1-10
-    CGFloat numStartX = 12;
-    CGFloat numTotalW = PW - 24;
-    CGFloat numSpacing = numTotalW / 9;
+    CGFloat ns = (PW - 24) / 9;
     s_nums = [NSMutableArray array];
     for (int i = 1; i <= 10; i++) {
-        UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        CGFloat bx = numStartX + (i - 1) * numSpacing;
-        CGFloat bw = numSpacing - 4;
-        if (bw < 22) bw = 22;
-        b.frame = CGRectMake(bx, 40, bw, 28);
+        UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+        CGFloat bw = ns - 4; if (bw < 22) bw = 22;
+        b.frame = CGRectMake(12 + (i-1)*ns, 40, bw, 28);
         [b setTitle:[@(i) stringValue] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [b setTitleColor:clr(0,255,68,1) forState:UIControlStateSelected];
-        b.backgroundColor = [UIColor blackColor];
+        b.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1];
         b.layer.cornerRadius = 7;
-        b.layer.borderWidth = 1.5;
-        b.layer.borderColor = clr(26,26,26,0.6).CGColor;
+        b.tintColor = [UIColor clearColor];
         b.titleLabel.font = [UIFont boldSystemFontOfSize:12];
         b.tag = i;
         [b addTarget:self action:@selector(num:) forControlEvents:UIControlEventTouchUpInside];
         [s_panel addSubview:b];
         [s_nums addObject:b];
     }
-    [s_panel addSubview:mkSep(0, 74, PW)];
+
+    UIView *sep2 = [[UIView alloc] initWithFrame:CGRectMake(0, 74, PW, 1)];
+    sep2.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
+    [s_panel addSubview:sep2];
 
     // Controls
-    CGFloat cw = (PW - 24 - 4 * 4) / 5;
+    CGFloat cw = (PW - 24 - 16) / 5;
     if (cw > 62) cw = 62;
-    CGFloat cTotalW = cw * 5 + 4 * 4;
-    CGFloat cStartX = (PW - cTotalW) / 2;
+    CGFloat ctw = cw * 5 + 16;
+    CGFloat csx = (PW - ctw) / 2;
 
-    s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    s_onBtn.frame = CGRectMake(cStartX, 82, cw, 30);
+    s_onBtn = [UIButton buttonWithType:UIButtonTypeSystem];
+    s_onBtn.frame = CGRectMake(csx, 82, cw, 30);
     [s_onBtn setTitle:@"ON" forState:UIControlStateNormal];
+    [s_onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     s_onBtn.backgroundColor = clr(0,100,0,0.9);
     s_onBtn.layer.cornerRadius = 8;
-    s_onBtn.layer.borderWidth = 1.5;
-    s_onBtn.layer.borderColor = clr(0,255,0,0.9).CGColor;
+    s_onBtn.tintColor = [UIColor clearColor];
     s_onBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [s_onBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
     [s_onBtn addTarget:self action:@selector(onT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:s_onBtn];
 
-    CGFloat msX = cStartX + (cw + 4);
-    s_msL = mkLab(msX, 82, cw, 30, @"ms:50", 11);
-    s_msL.layer.borderWidth = 1.5;
-    s_msL.layer.borderColor = clr(26,26,26,0.6).CGColor;
+    CGFloat msx = csx + cw + 4;
+    s_msL = [self mkL:msx y:82 w:cw h:30 t:@"ms:50" fs:11];
     s_msL.layer.cornerRadius = 8;
     [s_panel addSubview:s_msL];
-    UIButton *msBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    msBtn.frame = msL.frame;
-    msBtn.backgroundColor = [UIColor clearColor];
-    [msBtn addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:msBtn];
+    UIButton *msB = [UIButton buttonWithType:UIButtonTypeSystem];
+    msB.frame = s_msL.frame;
+    msB.tintColor = [UIColor clearColor];
+    [msB addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:msB];
 
-    CGFloat cxxX = cStartX + 2 * (cw + 4);
-    s_cxxL = mkLab(cxxX, 82, cw, 30, @"cxx", 11);
-    s_cxxL.layer.borderWidth = 1.5;
-    s_cxxL.layer.borderColor = clr(26,26,26,0.6).CGColor;
+    CGFloat cxx = csx + 2*(cw+4);
+    s_cxxL = [self mkL:cxx y:82 w:cw h:30 t:@"cxx" fs:11];
     s_cxxL.layer.cornerRadius = 8;
     [s_panel addSubview:s_cxxL];
-    UIButton *cxxBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    cxxBtn.frame = s_cxxL.frame;
-    cxxBtn.backgroundColor = [UIColor clearColor];
-    [cxxBtn addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:cxxBtn];
+    UIButton *cxxB = [UIButton buttonWithType:UIButtonTypeSystem];
+    cxxB.frame = s_cxxL.frame;
+    cxxB.tintColor = [UIColor clearColor];
+    [cxxB addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:cxxB];
 
-    CGFloat liteX = cStartX + 3 * (cw + 4);
-    s_liteL = mkLab(liteX, 82, cw, 30, @"LiTE", 11);
-    s_liteL.layer.borderWidth = 1.5;
-    s_liteL.layer.borderColor = clr(26,26,26,0.6).CGColor;
+    CGFloat lx = csx + 3*(cw+4);
+    s_liteL = [self mkL:lx y:82 w:cw h:30 t:@"LiTE" fs:11];
     s_liteL.layer.cornerRadius = 8;
     [s_panel addSubview:s_liteL];
-    UIButton *liteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    liteBtn.frame = s_liteL.frame;
-    liteBtn.backgroundColor = [UIColor clearColor];
-    [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:liteBtn];
+    UIButton *liteB = [UIButton buttonWithType:UIButtonTypeSystem];
+    liteB.frame = s_liteL.frame;
+    liteB.tintColor = [UIColor clearColor];
+    [liteB addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:liteB];
 
-    CGFloat hideX = cStartX + 4 * (cw + 4);
-    UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    hideBtn.frame = CGRectMake(hideX, 82, cw, 30);
-    [hideBtn setTitle:@"Hide" forState:UIControlStateNormal];
-    [hideBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    hideBtn.backgroundColor = [UIColor blackColor];
-    hideBtn.layer.cornerRadius = 8;
-    hideBtn.layer.borderWidth = 1.5;
-    hideBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    hideBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:hideBtn];
+    CGFloat hx = csx + 4*(cw+4);
+    UIButton *hideB = [UIButton buttonWithType:UIButtonTypeSystem];
+    hideB.frame = CGRectMake(hx, 82, cw, 30);
+    [hideB setTitle:@"Hide" forState:UIControlStateNormal];
+    [hideB setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    hideB.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1];
+    hideB.layer.cornerRadius = 8;
+    hideB.tintColor = [UIColor clearColor];
+    hideB.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [hideB addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:hideB];
 
     // Status
-    s_st = [[UILabel alloc] initWithFrame:CGRectMake(8, 118, PW - 16, 16)];
+    s_st = [[UILabel alloc] initWithFrame:CGRectMake(8, 118, PW-16, 16)];
     s_st.textColor = [UIColor whiteColor];
     s_st.font = [UIFont systemFontOfSize:10];
     s_st.textAlignment = NSTextAlignmentCenter;
@@ -384,89 +300,82 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     [s_panel addSubview:s_st];
 
     // Info
-    UILabel *infoL = [[UILabel alloc] initWithFrame:CGRectMake(8, 136, PW - 16, 16)];
-    infoL.textColor = [UIColor whiteColor];
-    infoL.font = [UIFont systemFontOfSize:10];
-    infoL.textAlignment = NSTextAlignmentCenter;
-    infoL.text = @"اختر رقم | LiTE لربط الحسابات | cxx قلتش";
-    [s_panel addSubview:infoL];
+    UILabel *info = [[UILabel alloc] initWithFrame:CGRectMake(8, 136, PW-16, 16)];
+    info.textColor = [UIColor colorWithWhite:0.7 alpha:1];
+    info.font = [UIFont systemFontOfSize:10];
+    info.textAlignment = NSTextAlignmentCenter;
+    info.text = @"اختر رقم | LiTE لربط الحسابات | cxx قلتش";
+    [s_panel addSubview:info];
 
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panP:)];
     [s_panel addGestureRecognizer:pan];
 
-    [cv addSubview:s_panel];
+    [s_overlay addSubview:s_panel];
 
     // Circle
-    CGFloat cs = 48;
-    CGFloat cx2 = sw - cs - 20;
-    CGFloat cy2 = [UIScreen mainScreen].bounds.size.height / 2 - cs / 2;
-    s_circle = [[UIView alloc] initWithFrame:CGRectMake(cx2, cy2, cs, cs)];
+    CGFloat cs2 = 48;
+    s_circle = [[UIView alloc] initWithFrame:CGRectMake(sw-cs2-20, sh/2-cs2/2, cs2, cs2)];
     s_circle.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
-    s_circle.layer.cornerRadius = cs / 2;
-    s_circle.layer.borderWidth = 2.5;
-    s_circle.layer.borderColor = [UIColor blackColor].CGColor;
+    s_circle.layer.cornerRadius = cs2/2;
     s_circle.hidden = YES;
-    s_circle.userInteractionEnabled = YES;
 
-    UILabel *cl = [[UILabel alloc] initWithFrame:CGRectMake(0, 0, cs, cs)];
+    UILabel *cl = [[UILabel alloc] initWithFrame:s_circle.bounds];
     cl.text = @"515";
     cl.textColor = [UIColor colorWithWhite:1 alpha:0.7];
     cl.font = [UIFont boldSystemFontOfSize:13];
     cl.textAlignment = NSTextAlignmentCenter;
     [s_circle addSubview:cl];
 
-    UITapGestureRecognizer *ctap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showPanel)];
-    [s_circle addGestureRecognizer:ctap];
-    UIPanGestureRecognizer *cpan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panCircle:)];
-    [s_circle addGestureRecognizer:cpan];
+    UITapGestureRecognizer *ct = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showPanel)];
+    [s_circle addGestureRecognizer:ct];
+    UIPanGestureRecognizer *cp = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panC:)];
+    [s_circle addGestureRecognizer:cp];
 
-    [cv addSubview:s_circle];
-
-    CFNotificationCenterAddObserver(
-        CFNotificationCenterGetDarwinNotifyCenter(), NULL,
-        onHeartbeat,
-        (__bridge CFStringRef)@"com.yalla.liteagent.slave.heartbeat",
-        NULL,
-        CFNotificationSuspensionBehaviorDeliverImmediately);
-
+    [s_overlay addSubview:s_circle];
     [self upd];
 }
 
-- (void)panPanel:(UIPanGestureRecognizer *)g {
-    static CGPoint startCenter;
+- (UILabel *)mkL:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h t:(NSString *)t fs:(CGFloat)fs {
+    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
+    lb.text = t;
+    lb.textColor = [UIColor whiteColor];
+    lb.font = [UIFont boldSystemFontOfSize:fs];
+    lb.textAlignment = NSTextAlignmentCenter;
+    return lb;
+}
+
+- (void)panP:(UIPanGestureRecognizer *)g {
+    static CGPoint sc;
     UIView *v = g.view;
-    if (g.state == UIGestureRecognizerStateBegan) startCenter = v.center;
-    if (g.state == UIGestureRecognizerStateChanged) {
+    if (g.state == 1) sc = v.center;
+    if (g.state == 2) {
         CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(startCenter.x + t.x, startCenter.y + t.y);
+        v.center = CGPointMake(sc.x+t.x, sc.y+t.y);
     }
 }
 
-- (void)panCircle:(UIPanGestureRecognizer *)g {
-    static CGPoint startCenter;
+- (void)panC:(UIPanGestureRecognizer *)g {
+    static CGPoint sc;
     UIView *v = g.view;
-    if (g.state == UIGestureRecognizerStateBegan) startCenter = v.center;
-    if (g.state == UIGestureRecognizerStateChanged) {
+    if (g.state == 1) sc = v.center;
+    if (g.state == 2) {
         CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(startCenter.x + t.x, startCenter.y + t.y);
+        v.center = CGPointMake(sc.x+t.x, sc.y+t.y);
     }
 }
 
 - (void)showPass {
-    UIWindow *kw = mainWindow();
-    if (!kw) return;
-    UIView *cv = kw.rootViewController.view;
-    if (!cv) return;
+    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
 
-    s_passView = [[UIView alloc] initWithFrame:kw.bounds];
+    s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sw, sh)];
     s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
+    s_passView.userInteractionEnabled = YES;
 
     UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 150)];
-    box.center = CGPointMake(kw.center.x, kw.center.y - 60);
-    box.backgroundColor = [UIColor blackColor];
+    box.center = CGPointMake(sw/2, sh/2 - 60);
+    box.backgroundColor = [UIColor colorWithWhite:0.1 alpha:1];
     box.layer.cornerRadius = 16;
-    box.layer.borderWidth = 2;
-    box.layer.borderColor = clr(26,26,26,0.8).CGColor;
 
     UILabel *pt = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, 220, 20)];
     pt.text = @"YallaAgent";
@@ -484,210 +393,238 @@ static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
     s_passField.font = [UIFont boldSystemFontOfSize:18];
     s_passField.backgroundColor = clr(20,20,20,0.9);
     s_passField.layer.cornerRadius = 8;
-    s_passField.layer.borderWidth = 1;
-    s_passField.layer.borderColor = clr(50,50,50,0.8).CGColor;
     [box addSubview:s_passField];
 
-    UIButton *unlockBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    unlockBtn.frame = CGRectMake(30, 96, 160, 34);
-    [unlockBtn setTitle:@"Unlock" forState:UIControlStateNormal];
-    [unlockBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    unlockBtn.backgroundColor = clr(20,20,80,0.9);
-    unlockBtn.layer.cornerRadius = 8;
-    unlockBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    [unlockBtn addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:unlockBtn];
+    UIButton *ub = [UIButton buttonWithType:UIButtonTypeSystem];
+    ub.frame = CGRectMake(30, 96, 160, 34);
+    [ub setTitle:@"Unlock" forState:UIControlStateNormal];
+    [ub setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    ub.backgroundColor = clr(20,20,80,0.9);
+    ub.layer.cornerRadius = 8;
+    ub.tintColor = [UIColor clearColor];
+    ub.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [ub addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:ub];
 
     [s_passView addSubview:box];
-    [cv addSubview:s_passView];
+    [s_overlay addSubview:s_passView];
     [s_passField becomeFirstResponder];
 }
 
-// === Slave ===
-- (void)slvToggleLite:(BOOL)on {
+// Slave
+- (void)slvLite:(BOOL)on {
     dispatch_async(dispatch_get_main_queue(), ^{
-        UIView *face = findLiveMikeFace();
-        if (!face) return;
-        face.hidden = on;
-        for (UIView *sv in face.subviews) sv.hidden = on;
-        callSel(face, @"lt_rippleButtonAction:", @(on ? 1 : 0), nil);
-        callSel(face, @"a9xView", nil, nil);
-        callSel(face, @"findLiveMikeFace", nil, nil);
+        UIView *f = findLiveMikeFace();
+        if (!f) return;
+        f.hidden = on;
+        for (UIView *sv in f.subviews) sv.hidden = on;
+        callSel(f, @"lt_rippleButtonAction:", @(on?1:0), nil);
+        callSel(f, @"a9xView", nil, nil);
+        callSel(f, @"findLiveMikeFace", nil, nil);
     });
 }
 
-- (void)slvCxxFreeze {
+- (void)slvCxxF {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"d6s:result:", @(1), nil);
-        callSel(face, @"c7rs:result:", @(1), nil);
-        callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
-        callSel(face, @"cxxNoSync", nil, nil);
-        callSel(face, @"g3v:", @(1), nil);
-        callSel(face, @"q2f:", @(1), nil);
-        callSel(face, @"u8k:", @(1), nil);
-        callSel(face, @"scan:result:", @(1), nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"d6s:result:", @(1), nil);
+        callSel(f, @"c7rs:result:", @(1), nil);
+        callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
+        callSel(f, @"cxxNoSync", nil, nil);
+        callSel(f, @"g3v:", @(1), nil);
+        callSel(f, @"q2f:", @(1), nil);
+        callSel(f, @"u8k:", @(1), nil);
+        callSel(f, @"scan:result:", @(1), nil);
     });
 }
 
-- (void)slvCxxSafeFreeze {
+- (void)slvCxxS {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"d6s:result:", @(1), nil);
-        callSel(face, @"c7rs:result:", @(1), nil);
-        callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
-        callSel(face, @"safeCxxNoSync", nil, nil);
-        callSel(face, @"v7l:", @(1), nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"d6s:result:", @(1), nil);
+        callSel(f, @"c7rs:result:", @(1), nil);
+        callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
+        callSel(f, @"safeCxxNoSync", nil, nil);
+        callSel(f, @"v7l:", @(1), nil);
     });
 }
 
-- (void)slvCxxUnfreeze {
+- (void)slvCxxU {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"d6s:result:", @(0), nil);
-        callSel(face, @"c7rs:result:", @(0), nil);
-        callSel(face, @"c7rsInsideChatOnly:result:", @(0), nil);
-        callSel(face, @"safeCxxNoSync", nil, nil);
-        callSel(face, @"g3v:", @(0), nil);
-        callSel(face, @"q2f:", @(0), nil);
-        callSel(face, @"u8k:", @(0), nil);
-        callSel(face, @"scan:result:", @(0), nil);
-        callSel(face, @"v7l:", @(0), nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"d6s:result:", @(0), nil);
+        callSel(f, @"c7rs:result:", @(0), nil);
+        callSel(f, @"c7rsInsideChatOnly:result:", @(0), nil);
+        callSel(f, @"safeCxxNoSync", nil, nil);
+        callSel(f, @"g3v:", @(0), nil);
+        callSel(f, @"q2f:", @(0), nil);
+        callSel(f, @"u8k:", @(0), nil);
+        callSel(f, @"scan:result:", @(0), nil);
+        callSel(f, @"v7l:", @(0), nil);
     });
 }
 
-- (void)slvSetMicOn:(int)slot {
+- (void)slvMic:(int)s on:(BOOL)a {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"selectMic:", @(slot), nil);
-        callSel(face, @"setm6b:", @(1), nil);
-        callSel(face, @"masterSetRunUIOnly:", @(1), nil);
-        callSel(face, @"tapMic", nil, nil);
-        callSel(face, @"tapOnce", nil, nil);
-        callSel(face, @"normalizedDigits:", [NSString stringWithFormat:@"%d", slot], nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"selectMic:", @(s), nil);
+        callSel(f, @"setm6b:", @(a?1:0), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(a?1:0), nil);
+        if (a) { callSel(f, @"tapMic", nil, nil); callSel(f, @"tapOnce", nil, nil); }
+        callSel(f, @"normalizedDigits:", [NSString stringWithFormat:@"%d", s], nil);
     });
 }
 
-- (void)slvSetMicOff:(int)slot {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"selectMic:", @(slot), nil);
-        callSel(face, @"setm6b:", @(0), nil);
-        callSel(face, @"masterSetRunUIOnly:", @(0), nil);
-    });
-}
-
-- (void)slvSetSpeed:(int)ms {
+- (void)slvSpd:(int)ms {
     s_slvMsIdx = 2;
-    for (int i = 0; i < 5; i++) {
-        if (kMsVals[i] == ms) { s_slvMsIdx = i; break; }
-    }
+    for (int i = 0; i < 5; i++) if (kMsVals[i] == ms) { s_slvMsIdx = i; break; }
     if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"setSpeed:", @(ms), nil);
-        callSel(face, @"changeSpeed", nil, nil);
-        callSel(face, @"setStatus", nil, nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"setSpeed:", @(ms), nil);
+        callSel(f, @"changeSpeed", nil, nil);
+        callSel(f, @"setStatus", nil, nil);
     });
 }
 
-- (void)slvStartTimer:(int)ms {
+- (void)slvTimer:(int)ms {
     if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
     s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
     if (!s_timer) return;
-    dispatch_source_set_timer(s_timer, dispatch_time(DISPATCH_TIME_NOW, ms * NSEC_PER_MSEC), ms * NSEC_PER_MSEC, 0);
+    dispatch_source_set_timer(s_timer, dispatch_time(DISPATCH_TIME_NOW, ms*NSEC_PER_MSEC), ms*NSEC_PER_MSEC, 0);
     dispatch_source_set_event_handler(s_timer, ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"timerTick", nil, nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"timerTick", nil, nil);
     });
     dispatch_resume(s_timer);
 }
 
 - (void)slvRunOn {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"selectMic:", @(s_instanceId + 1), nil);
-        callSel(face, @"setm6b:", @(1), nil);
-        callSel(face, @"masterSetRunUIOnly:", @(1), nil);
-        callSel(face, @"tapMic", nil, nil);
-        callSel(face, @"tapOnce", nil, nil);
-        callSel(face, @"isChatRoomTable:", face, nil);
-        callSel(face, @"toggleRun", nil, nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"selectMic:", @(s_instanceId+1), nil);
+        callSel(f, @"setm6b:", @(1), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
+        callSel(f, @"tapMic", nil, nil);
+        callSel(f, @"tapOnce", nil, nil);
+        callSel(f, @"isChatRoomTable:", f, nil);
+        callSel(f, @"toggleRun", nil, nil);
     });
 }
 
 - (void)slvRunOff {
     dispatch_async(dispatch_get_main_queue(), ^{
-        id face = findLiveMikeFace();
-        if (!face) return;
-        callSel(face, @"setm6b:", @(0), nil);
-        callSel(face, @"masterSetRunUIOnly:", @(0), nil);
-        callSel(face, @"toggleRun", nil, nil);
+        id f = findLiveMikeFace(); if (!f) return;
+        callSel(f, @"setm6b:", @(0), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
+        callSel(f, @"toggleRun", nil, nil);
     });
 }
 
-- (void)slvHandleCmd:(NSString *)cmd {
-    if ([cmd isEqualToString:@"lite.on"]) { s_slvLite = YES; [self slvToggleLite:YES]; }
-    else if ([cmd isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvToggleLite:NO]; }
-    else if ([cmd isEqualToString:@"run.on"]) { [self slvRunOn]; }
-    else if ([cmd isEqualToString:@"run.off"]) { [self slvRunOff]; }
-    else if ([cmd isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafeCxx = NO; [self slvCxxFreeze]; }
-    else if ([cmd isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafeCxx = YES; [self slvCxxSafeFreeze]; }
-    else if ([cmd hasPrefix:@"speed."]) {
-        int ms = [[cmd substringFromIndex:6] intValue];
-        [self slvSetSpeed:ms];
-        [self slvStartTimer:ms];
-    } else if ([cmd isEqualToString:@"P.M.S"]) {
+- (void)slvCmd:(NSString *)c {
+    if ([c isEqualToString:@"lite.on"]) { s_slvLite = YES; [self slvLite:YES]; }
+    else if ([c isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvLite:NO]; }
+    else if ([c isEqualToString:@"run.on"]) { [self slvRunOn]; }
+    else if ([c isEqualToString:@"run.off"]) { [self slvRunOff]; }
+    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; [self slvCxxF]; }
+    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; [self slvCxxS]; }
+    else if ([c hasPrefix:@"speed."]) {
+        int ms = [[c substringFromIndex:6] intValue];
+        [self slvSpd:ms]; [self slvTimer:ms];
+    } else if ([c isEqualToString:@"P.M.S"]) {
         s_slvMsIdx = s_slvMsIdx >= 4 ? 0 : s_slvMsIdx + 1;
-        [self slvSetSpeed:kMsVals[s_slvMsIdx]];
-        [self slvStartTimer:kMsVals[s_slvMsIdx]];
+        [self slvSpd:kMsVals[s_slvMsIdx]];
+        [self slvTimer:kMsVals[s_slvMsIdx]];
     }
 }
 
 @end
 
-// === C callbacks ===
+static YA *s_agent = nil;
+
 static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
     NSString *name = (__bridge NSString *)n;
     if ([name hasPrefix:kNotifyPrefix]) {
         NSString *cmd = [name substringFromIndex:kNotifyPrefix.length];
-        dispatch_async(dispatch_get_main_queue(), ^{ [s_agent slvHandleCmd:cmd]; });
+        dispatch_async(dispatch_get_main_queue(), ^{ [s_agent slvCmd:cmd]; });
     }
 }
 
 static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        s_slaveCount++;
-        if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
-        if (s_cxx) s_cxxCount = s_slaveCount;
-        [s_agent upd];
-    });
+    NSString *name = (__bridge NSString *)n;
+    if ([name hasPrefix:kNotifyHeartbeat]) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            s_slaveCount++;
+            if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
+            if (s_cxx) s_cxxCount = s_slaveCount;
+            [s_agent upd];
+        });
+    }
 }
 
-static void ysExceptionHandler(NSException *e) {
-    NSLog(@"[YallaAgent] %@: %@", e.name, e.reason);
+static void ysHandler(NSException *e) {
+    NSLog(@"[YA] %@: %@", e.name, e.reason);
 }
 
-// === Entry point ===
+static void setupMasterUI(void) {
+    if (s_overlay) return;
+
+    if (@available(iOS 13.0, *)) {
+        BOOL found = NO;
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                found = YES;
+                break;
+            }
+        }
+        if (!found) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
+                dispatch_get_main_queue(), ^{ setupMasterUI(); });
+            return;
+        }
+    }
+
+    s_overlay = [[UIWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];
+    s_overlay.windowLevel = UIWindowLevelAlert;
+    s_overlay.backgroundColor = [UIColor clearColor];
+    s_overlay.userInteractionEnabled = YES;
+    s_overlay.rootViewController = [[UIViewController alloc] init];
+    s_overlay.rootViewController.view.backgroundColor = [UIColor clearColor];
+    s_overlay.rootViewController.view.userInteractionEnabled = NO;
+
+    if (@available(iOS 13.0, *)) {
+        for (UIScene *scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                s_overlay.windowScene = (UIWindowScene *)scene;
+                break;
+            }
+        }
+    }
+    [s_overlay makeKeyAndVisible];
+
+#ifdef YM_DIRECT
+    [s_agent buildUI];
+#else
+    [s_agent showPass];
+#endif
+}
+
 __attribute__((constructor)) static void init() {
     @autoreleasepool {
         NSString *bid = [[NSBundle mainBundle] bundleIdentifier];
         if (![bid isEqualToString:kYallaBundle] && ![bid hasPrefix:kYallaBundle]) return;
+
         s_instanceId = getInstanceId();
         s_isMain = [bid isEqualToString:kYallaBundle];
 
-        NSSetUncaughtExceptionHandler(&ysExceptionHandler);
+        NSSetUncaughtExceptionHandler(&ysHandler);
 
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), NULL, onNotify,
+            NULL, NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately);
+        CFNotificationCenterAddObserver(
+            CFNotificationCenterGetDarwinNotifyCenter(), NULL, onHeartbeat,
             NULL, NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
@@ -695,25 +632,7 @@ __attribute__((constructor)) static void init() {
 
         if (s_isMain) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                UIWindow *kw = mainWindow();
-                if (!kw) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                        UIWindow *kw2 = mainWindow();
-                        if (kw2) {
-#ifdef YM_DIRECT
-                            [s_agent buildUI];
-#else
-                            [s_agent showPass];
-#endif
-                        }
-                    });
-                } else {
-#ifdef YM_DIRECT
-                    [s_agent buildUI];
-#else
-                    [s_agent showPass];
-#endif
-                }
+                setupMasterUI();
             });
         }
 
