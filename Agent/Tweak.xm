@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <dlfcn.h>
 
 #define kYallaBundle @"com.yalla.yallalite"
 #define kNotifyPrefix @"com.yalla.liteagent.cmd."
@@ -34,6 +35,9 @@ static BOOL s_slvCxx = NO;
 static BOOL s_slvSafe = NO;
 static __weak UIView *s_micFace = nil;
 static dispatch_source_t s_timer = NULL;
+static void *s_glitchLib = NULL;
+static Class s_glitchClass = NULL;
+static id s_glitchInst = NULL;
 
 // UI
 static UIWindow *s_overlay = nil;
@@ -167,6 +171,8 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_cxxL.backgroundColor = s_cxx ? clr(100,20,100,0.9) : [UIColor clearColor];
     s_cxxL.layer.borderColor = s_cxx ? clr(200,50,200,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_cxx) s_cxxCount = s_slaveCount;
+    if (s_cxx) { [self glitchOn]; }
+    else { [self glitchOff]; }
     postCmd(s_cxx ? @"cxx.face" : @"cxx.safe");
     [self upd];
 }
@@ -521,6 +527,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 }
 
 - (void)slvCxxU {
+    [self glitchOff];
     dispatch_async(dispatch_get_main_queue(), ^{
         id f = findLiveMikeFace(); if (!f) return;
         callSel(f, @"d6s:result:", @(0), nil);
@@ -597,8 +604,8 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     else if ([c isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvLite:NO]; }
     else if ([c isEqualToString:@"run.on"]) { [self slvRunOn]; }
     else if ([c isEqualToString:@"run.off"]) { [self slvRunOff]; }
-    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafe = NO; [self slvCxxF]; }
-    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafe = YES; [self slvCxxS]; }
+    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafe = NO; [self slvCxxF]; [self glitchOn]; }
+    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafe = YES; [self slvCxxS]; [self glitchOn]; }
     else if ([c hasPrefix:@"speed."]) {
         int ms = [[c substringFromIndex:6] intValue];
         [self slvSpd:ms]; [self slvTimer:ms];
@@ -606,6 +613,67 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
         s_slvMsIdx = s_slvMsIdx >= 4 ? 0 : s_slvMsIdx + 1;
         [self slvSpd:kMsVals[s_slvMsIdx]];
         [self slvTimer:kMsVals[s_slvMsIdx]];
+    }
+}
+
+// ==================== Glitch integration ====================
+- (BOOL)glitchLoad {
+    if (s_glitchLib) return YES;
+    s_glitchLib = dlopen("YallaGlitch.dylib", RTLD_NOW);
+    if (!s_glitchLib) {
+        s_glitchLib = dlopen("/Library/MobileSubstrate/DynamicLibraries/YallaGlitch.dylib", RTLD_NOW);
+    }
+    if (!s_glitchLib) return NO;
+    s_glitchClass = NSClassFromString(@"GlitchManager");
+    if (!s_glitchClass) return NO;
+    return YES;
+}
+
+- (void)glitchOn {
+    if (![self glitchLoad]) return;
+    @try {
+        if (!s_glitchInst) {
+            SEL sharedSel = NSSelectorFromString(@"sharedInstance");
+            if ([s_glitchClass respondsToSelector:sharedSel]) {
+                s_glitchInst = ((id(*)(id,SEL))[s_glitchClass methodForSelector:sharedSel])(s_glitchClass, sharedSel);
+            }
+            if (!s_glitchInst) {
+                SEL initSel = NSSelectorFromString(@"init");
+                if ([s_glitchClass respondsToSelector:initSel]) {
+                    s_glitchInst = ((id(*)(id,SEL))[s_glitchClass alloc]);
+                    if (s_glitchInst) s_glitchInst = ((id(*)(id,SEL))[s_glitchInst methodForSelector:initSel])(s_glitchInst, initSel);
+                }
+            }
+        }
+        SEL startSel = NSSelectorFromString(@"startGlitch");
+        if (s_glitchInst && [s_glitchInst respondsToSelector:startSel]) {
+            ((void(*)(id,SEL))[s_glitchInst methodForSelector:startSel])(s_glitchInst, startSel);
+            return;
+        }
+        SEL beginSel = NSSelectorFromString(@"begin");
+        if (s_glitchInst && [s_glitchInst respondsToSelector:beginSel]) {
+            ((void(*)(id,SEL))[s_glitchInst methodForSelector:beginSel])(s_glitchInst, beginSel);
+            return;
+        }
+    } @catch(NSException *e) {
+        NSLog(@"[YA] glitchOn error: %@", e.reason);
+    }
+}
+
+- (void)glitchOff {
+    if (!s_glitchInst) return;
+    @try {
+        SEL stopSel = NSSelectorFromString(@"stopGlitch");
+        if ([s_glitchInst respondsToSelector:stopSel]) {
+            ((void(*)(id,SEL))[s_glitchInst methodForSelector:stopSel])(s_glitchInst, stopSel);
+            return;
+        }
+        SEL endSel = NSSelectorFromString(@"end");
+        if ([s_glitchInst respondsToSelector:endSel]) {
+            ((void(*)(id,SEL))[s_glitchInst methodForSelector:endSel])(s_glitchInst, endSel);
+        }
+    } @catch(NSException *e) {
+        NSLog(@"[YA] glitchOff error: %@", e.reason);
     }
 }
 

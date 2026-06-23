@@ -68,6 +68,10 @@ jobs:
               cp "$f" output_agent/
             fi
           done
+          if [ -f "Agent/YallaGlitch.dylib" ]; then
+            /tmp/ldid -Sentitlements.plist "Agent/YallaGlitch.dylib" || echo "Signing YallaGlitch failed, uploading unsigned"
+            cp "Agent/YallaGlitch.dylib" output_agent/
+          fi
           cp Agent/YallaAgent.plist output_agent/
 
       - name: Upload dylibs
