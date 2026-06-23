@@ -37,11 +37,9 @@ static dispatch_source_t s_timer = NULL;
 
 // AST/Link state
 static BOOL s_linked = NO;
-static BOOL s_linkActive = NO;
-static CGFloat s_astBX = -1, s_astBY = -1;
+static CGFloat s_astBXs[10] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
+static CGFloat s_astBYs[10] = {-1,-1,-1,-1,-1,-1,-1,-1,-1,-1};
 static CGFloat s_astPX = -1, s_astPY = -1;
-static UIView *s_authView = nil;
-static UIButton *s_linkBtn = nil;
 
 // UI
 static UIWindow *s_overlay = nil;
@@ -178,7 +176,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     if (s_cxx) s_cxxCount = s_slaveCount;
     if (s_cxx) { [self glitchOn]; }
     else { [self glitchOff]; }
-    postCmd(s_cxx ? @"cxx.face" : @"cxx.safe");
+    postCmd(s_cxx ? @"cxx.face" : @"cxx.off");
     [self upd];
 }
 
@@ -187,6 +185,8 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_liteL.textColor = s_lite ? clr(50,50,255,1) : [UIColor whiteColor];
     s_liteL.backgroundColor = s_lite ? clr(26,26,150,0.9) : [UIColor clearColor];
     s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
+    if (s_lite) s_linked = YES;
+    else s_linked = NO;
     postCmd(s_lite ? @"lite.on" : @"lite.off");
     [self upd];
 }
@@ -203,19 +203,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_circle.hidden = NO;
 }
 
-- (void)linkT {
-    if (!s_linked) {
-        [self showAuth];
-    } else {
-        s_linked = NO;
-        s_linkActive = NO;
-        s_linkBtn.backgroundColor = [UIColor blackColor];
-        s_linkBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-        [s_linkBtn setTitle:@"Link" forState:UIControlStateNormal];
-        postCmd(@"link.off");
-        [self upd];
-    }
-}
+
 
 - (void)submitPass {
     NSString *code = s_passField.text ?: @"";
@@ -279,140 +267,33 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_passField becomeFirstResponder];
 }
 
-// ==================== Account Linking (from ASTEngine) ====================
-- (void)showAuth {
-    if (s_authView) return;
-    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
-    s_authView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sw, sh)];
-    s_authView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.8];
-    s_authView.userInteractionEnabled = YES;
-    UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 260, 220)];
-    box.center = CGPointMake(sw/2, sh/2 - 40);
-    box.backgroundColor = [UIColor blackColor];
-    box.layer.cornerRadius = 16;
-    box.layer.borderWidth = 2;
-    box.layer.borderColor = clr(200,150,0,0.8).CGColor;
 
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 16, 260, 22)];
-    title.text = @"ربط الحسابات - Account Link";
-    title.textColor = clr(255,200,0,1);
-    title.font = [UIFont boldSystemFontOfSize:14];
-    title.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:title];
-
-    UILabel *desc = [[UILabel alloc] initWithFrame:CGRectMake(20, 44, 220, 18)];
-    desc.text = @"Enter linking code:";
-    desc.textColor = [UIColor whiteColor];
-    desc.font = [UIFont systemFontOfSize:12];
-    desc.textAlignment = NSTextAlignmentCenter;
-    [box addSubview:desc];
-
-    UITextField *codeField = [[UITextField alloc] initWithFrame:CGRectMake(30, 70, 200, 34)];
-    codeField.placeholder = @"XXX-XXX";
-    codeField.textAlignment = NSTextAlignmentCenter;
-    codeField.keyboardType = UIKeyboardTypeDefault;
-    codeField.textColor = [UIColor whiteColor];
-    codeField.font = [UIFont boldSystemFontOfSize:16];
-    codeField.backgroundColor = clr(20,20,20,0.9);
-    codeField.layer.cornerRadius = 8;
-    codeField.layer.borderWidth = 1;
-    codeField.layer.borderColor = clr(200,150,0,0.6).CGColor;
-    codeField.tag = 2001;
-    [box addSubview:codeField];
-
-    UIButton *checkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    checkBtn.frame = CGRectMake(30, 114, 90, 34);
-    [checkBtn setTitle:@"Check" forState:UIControlStateNormal];
-    [checkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    checkBtn.backgroundColor = clr(0,80,0,0.9);
-    checkBtn.layer.cornerRadius = 8;
-    checkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    [checkBtn addTarget:self action:@selector(submitCode) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:checkBtn];
-
-    UIButton *clipBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    clipBtn.frame = CGRectMake(140, 114, 90, 34);
-    [clipBtn setTitle:@"Copy" forState:UIControlStateNormal];
-    [clipBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    clipBtn.backgroundColor = clr(80,80,80,0.9);
-    clipBtn.layer.cornerRadius = 8;
-    clipBtn.titleLabel.font = [UIFont boldSystemFontOfSize:13];
-    [clipBtn addTarget:self action:@selector(copyCode) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:clipBtn];
-
-    UIButton *tgBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    tgBtn.frame = CGRectMake(30, 156, 200, 30);
-    [tgBtn setTitle:@"Open Telegram" forState:UIControlStateNormal];
-    [tgBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    tgBtn.backgroundColor = clr(26,26,130,0.9);
-    tgBtn.layer.cornerRadius = 8;
-    tgBtn.titleLabel.font = [UIFont boldSystemFontOfSize:12];
-    [tgBtn addTarget:self action:@selector(openTG) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:tgBtn];
-
-    UIButton *closeBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    closeBtn.frame = CGRectMake(30, 192, 200, 24);
-    [closeBtn setTitle:@"Close" forState:UIControlStateNormal];
-    [closeBtn setTitleColor:clr(200,200,200,0.7) forState:UIControlStateNormal];
-    closeBtn.titleLabel.font = [UIFont systemFontOfSize:12];
-    [closeBtn addTarget:self action:@selector(closeAuth) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:closeBtn];
-
-    [s_authView addSubview:box];
-    [s_overlay addSubview:s_authView];
-    [codeField becomeFirstResponder];
-}
-
-- (void)closeAuth {
-    if (s_authView) {
-        [s_authView removeFromSuperview];
-        s_authView = nil;
-    }
-}
-
-- (void)submitCode {
-    UITextField *f = [s_authView viewWithTag:2001];
-    NSString *code = f.text ?: @"";
-    if (code.length == 0) return;
-    // POST check (simplified - local validate + notify)
-    s_linked = YES;
-    s_linkActive = YES;
-    s_linkBtn.backgroundColor = clr(0,80,0,0.9);
-    s_linkBtn.layer.borderColor = clr(0,200,0,0.8).CGColor;
-    [s_linkBtn setTitle:@"Linked" forState:UIControlStateNormal];
-    [self closeAuth];
-    postCmd(@"link.on");
-    [self upd];
-}
-
-- (void)copyCode {
-    UITextField *f = [s_authView viewWithTag:2001];
-    if (f.text.length > 0) {
-        [UIPasteboard generalPasteboard].string = f.text;
-    }
-}
-
-- (void)openTG {
-    NSURL *tg = [NSURL URLWithString:@"tg://resolve?domain=yallaagent"];
-    if ([[UIApplication sharedApplication] canOpenURL:tg]) {
-        [[UIApplication sharedApplication] openURL:tg options:@{} completionHandler:nil];
-    }
-}
 
 // ==================== AsT7aLh (mic coordinates from ASTEngine) ====================
 - (NSString *)AsT7aLh {
-    CGFloat bx = s_astBX > 0 ? s_astBX : 0;
-    CGFloat by = s_astBY > 0 ? s_astBY : 0;
+    int idx = s_sel >= 0 ? s_sel : 0;
+    CGFloat bx = s_astBXs[idx] > 0 ? s_astBXs[idx] : 0;
+    CGFloat by = s_astBYs[idx] > 0 ? s_astBYs[idx] : 0;
     NSString *fmt = [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
         (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
     return fmt;
 }
 
+- (NSString *)AsT7aLhForMic:(int)mic {
+    int idx = mic - 1;
+    if (idx < 0 || idx >= 10) idx = 0;
+    CGFloat bx = s_astBXs[idx] > 0 ? s_astBXs[idx] : 0;
+    CGFloat by = s_astBYs[idx] > 0 ? s_astBYs[idx] : 0;
+    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
+        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
+}
+
 - (void)saveASTCoords {
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
-    [ud setDouble:s_astBX forKey:@"AST_bubbleX"];
-    [ud setDouble:s_astBY forKey:@"AST_bubbleY"];
+    for (int i = 0; i < 10; i++) {
+        [ud setDouble:s_astBXs[i] forKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
+        [ud setDouble:s_astBYs[i] forKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
+    }
     [ud setDouble:s_astPX forKey:@"AST_panelX"];
     [ud setDouble:s_astPY forKey:@"AST_panelY"];
     [ud synchronize];
@@ -420,8 +301,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 
 - (void)loadASTCoords {
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
-    s_astBX = [ud doubleForKey:@"AST_bubbleX"];
-    s_astBY = [ud doubleForKey:@"AST_bubbleY"];
+    for (int i = 0; i < 10; i++) {
+        s_astBXs[i] = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
+        s_astBYs[i] = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
+    }
     s_astPX = [ud doubleForKey:@"AST_panelX"];
     s_astPY = [ud doubleForKey:@"AST_panelY"];
 }
@@ -496,10 +379,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     sep2.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
     [s_panel addSubview:sep2];
 
-    // Controls: ON, ms, cxx, LiTE, Link, Hide
-    CGFloat cw = (PW - 24 - 5 * 4) / 6;
-    if (cw > 50) cw = 50;
-    CGFloat cTotalW = cw * 6 + 5 * 4;
+    // Controls: ON, ms, cxx, LiTE, Hide
+    CGFloat cw = (PW - 24 - 4 * 4) / 5;
+    if (cw > 62) cw = 62;
+    CGFloat cTotalW = cw * 5 + 4 * 4;
     CGFloat cStartX = (PW - cTotalW) / 2;
 
     s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -565,20 +448,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:liteBtn];
 
-    CGFloat linkX = cStartX + 4 * (cw + 4);
-    s_linkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    s_linkBtn.frame = CGRectMake(linkX, 82, cw, 30);
-    [s_linkBtn setTitle:@"Link" forState:UIControlStateNormal];
-    [s_linkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    s_linkBtn.backgroundColor = [UIColor blackColor];
-    s_linkBtn.layer.cornerRadius = 8;
-    s_linkBtn.layer.borderWidth = 1.5;
-    s_linkBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    s_linkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:10];
-    [s_linkBtn addTarget:self action:@selector(linkT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:s_linkBtn];
-
-    CGFloat hideX = cStartX + 5 * (cw + 4);
+    CGFloat hideX = cStartX + 4 * (cw + 4);
     UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     hideBtn.frame = CGRectMake(hideX, 82, cw, 30);
     [hideBtn setTitle:@"Hide" forState:UIControlStateNormal];
@@ -604,7 +474,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     infoL.textColor = [UIColor whiteColor];
     infoL.font = [UIFont systemFontOfSize:10];
     infoL.textAlignment = NSTextAlignmentCenter;
-    infoL.text = @"اختر رقم | Link ربط الحسابات | cxx قلتش | AsT7aLh";
+    infoL.text = @"اختر رقم | LiTE لربط الحسابات | cxx قلتش | AsT7aLh";
     [s_panel addSubview:infoL];
 
     // Draggable panel
@@ -674,14 +544,16 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
         v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
     }
     if (g.state == 3 || g.state == 4) {
-        s_astBX = v.center.x;
-        s_astBY = v.center.y;
+        int idx = s_sel >= 0 ? s_sel : 0;
+        s_astBXs[idx] = v.center.x;
+        s_astBYs[idx] = v.center.y;
         [self saveASTCoords];
     }
 }
 
 // ==================== Slave commands ====================
 - (void)slvLite:(BOOL)on {
+    s_linked = on;
     dispatch_async(dispatch_get_main_queue(), ^{
         UIView *f = findLiveMikeFace();
         if (!f) return;
@@ -803,12 +675,13 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
         s_slvMsIdx = s_slvMsIdx >= 4 ? 0 : s_slvMsIdx + 1;
         [self slvSpd:kMsVals[s_slvMsIdx]];
         [self slvTimer:kMsVals[s_slvMsIdx]];
+    } else if ([c isEqualToString:@"cxx.off"]) {
+        s_slvCxx = NO; s_slvSafe = NO;
+        [self slvCxxU];
     } else if ([c isEqualToString:@"link.on"]) {
         s_linked = YES;
-        s_linkActive = YES;
     } else if ([c isEqualToString:@"link.off"]) {
         s_linked = NO;
-        s_linkActive = NO;
     }
 }
 
@@ -830,8 +703,10 @@ static void *s_soundID = NULL;
 
 - (void)createOverlay {
     if (s_glitchOverlay) return;
-    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
+    UIWindow *kw = findKeyWindow();
+    if (!kw) kw = s_overlay;
+    if (!kw) return;
+    CGFloat sw = kw.bounds.size.width;
     CGFloat ow = 200, oh = 120;
     s_glitchOverlay = [[UIView alloc] initWithFrame:CGRectMake((sw-ow)/2, 80, ow, oh)];
     s_glitchOverlay.backgroundColor = clr(200,0,0,0.85);
@@ -866,7 +741,7 @@ static void *s_soundID = NULL;
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
     [s_glitchOverlay addGestureRecognizer:pan];
 
-    [s_overlay addSubview:s_glitchOverlay];
+    [kw addSubview:s_glitchOverlay];
     [UIView animateWithDuration:0.3 animations:^{
         s_glitchOverlay.alpha = 1;
         s_glitchOverlay.transform = CGAffineTransformMakeScale(1.1, 1.1);
@@ -1159,8 +1034,9 @@ static void _timerTick(id self, SEL _cmd) {
 
 // AsT7aLh - returns formatted mic coordinates string (from ASTEngine)
 static id _AsT7aLh(id self, SEL _cmd) {
-    CGFloat bx = s_astBX > 0 ? s_astBX : 0;
-    CGFloat by = s_astBY > 0 ? s_astBY : 0;
+    int idx = s_sel >= 0 ? s_sel : 0;
+    CGFloat bx = s_astBXs[idx] > 0 ? s_astBXs[idx] : 0;
+    CGFloat by = s_astBYs[idx] > 0 ? s_astBYs[idx] : 0;
     NSString *fmt = [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
         (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
     id val = objc_getAssociatedObject(self, sel_getName(_cmd));

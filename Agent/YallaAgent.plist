@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+﻿<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -7,14 +7,104 @@
         <key>Bundles</key>
         <array>
             <string>com.yalla.yallalite</string>
+            <string>com.yalla.yallalite1</string>
+            <string>com.yalla.yallalite2</string>
+            <string>com.yalla.yallalite3</string>
+            <string>com.yalla.yallalite4</string>
+            <string>com.yalla.yallalite5</string>
+            <string>com.yalla.yallalite6</string>
+            <string>com.yalla.yallalite7</string>
+            <string>com.yalla.yallalite8</string>
+            <string>com.yalla.yallalite9</string>
+            <string>com.yalla.yallalite10</string>
             <string>com.yalla.yallalite11</string>
+            <string>com.yalla.yallalite12</string>
+            <string>com.yalla.yallalite13</string>
+            <string>com.yalla.yallalite14</string>
+            <string>com.yalla.yallalite15</string>
+            <string>com.yalla.yallalite16</string>
+            <string>com.yalla.yallalite17</string>
+            <string>com.yalla.yallalite18</string>
+            <string>com.yalla.yallalite19</string>
+            <string>com.yalla.yallalite20</string>
+            <string>com.yalla.yallalite21</string>
             <string>com.yalla.yallalite22</string>
+            <string>com.yalla.yallalite23</string>
+            <string>com.yalla.yallalite24</string>
+            <string>com.yalla.yallalite25</string>
+            <string>com.yalla.yallalite26</string>
+            <string>com.yalla.yallalite27</string>
+            <string>com.yalla.yallalite28</string>
+            <string>com.yalla.yallalite29</string>
+            <string>com.yalla.yallalite30</string>
+            <string>com.yalla.yallalite31</string>
+            <string>com.yalla.yallalite32</string>
             <string>com.yalla.yallalite33</string>
+            <string>com.yalla.yallalite34</string>
+            <string>com.yalla.yallalite35</string>
+            <string>com.yalla.yallalite36</string>
+            <string>com.yalla.yallalite37</string>
+            <string>com.yalla.yallalite38</string>
+            <string>com.yalla.yallalite39</string>
+            <string>com.yalla.yallalite40</string>
+            <string>com.yalla.yallalite41</string>
+            <string>com.yalla.yallalite42</string>
+            <string>com.yalla.yallalite43</string>
             <string>com.yalla.yallalite44</string>
+            <string>com.yalla.yallalite45</string>
+            <string>com.yalla.yallalite46</string>
+            <string>com.yalla.yallalite47</string>
+            <string>com.yalla.yallalite48</string>
+            <string>com.yalla.yallalite49</string>
+            <string>com.yalla.yallalite50</string>
+            <string>com.yalla.yallalite51</string>
+            <string>com.yalla.yallalite52</string>
+            <string>com.yalla.yallalite53</string>
+            <string>com.yalla.yallalite54</string>
             <string>com.yalla.yallalite55</string>
+            <string>com.yalla.yallalite56</string>
+            <string>com.yalla.yallalite57</string>
+            <string>com.yalla.yallalite58</string>
+            <string>com.yalla.yallalite59</string>
+            <string>com.yalla.yallalite60</string>
+            <string>com.yalla.yallalite61</string>
+            <string>com.yalla.yallalite62</string>
+            <string>com.yalla.yallalite63</string>
+            <string>com.yalla.yallalite64</string>
+            <string>com.yalla.yallalite65</string>
             <string>com.yalla.yallalite66</string>
+            <string>com.yalla.yallalite67</string>
+            <string>com.yalla.yallalite68</string>
+            <string>com.yalla.yallalite69</string>
+            <string>com.yalla.yallalite70</string>
+            <string>com.yalla.yallalite71</string>
+            <string>com.yalla.yallalite72</string>
+            <string>com.yalla.yallalite73</string>
+            <string>com.yalla.yallalite74</string>
+            <string>com.yalla.yallalite75</string>
+            <string>com.yalla.yallalite76</string>
             <string>com.yalla.yallalite77</string>
+            <string>com.yalla.yallalite78</string>
+            <string>com.yalla.yallalite79</string>
+            <string>com.yalla.yallalite80</string>
+            <string>com.yalla.yallalite81</string>
+            <string>com.yalla.yallalite82</string>
+            <string>com.yalla.yallalite83</string>
+            <string>com.yalla.yallalite84</string>
+            <string>com.yalla.yallalite85</string>
+            <string>com.yalla.yallalite86</string>
+            <string>com.yalla.yallalite87</string>
             <string>com.yalla.yallalite88</string>
+            <string>com.yalla.yallalite89</string>
+            <string>com.yalla.yallalite90</string>
+            <string>com.yalla.yallalite91</string>
+            <string>com.yalla.yallalite92</string>
+            <string>com.yalla.yallalite93</string>
+            <string>com.yalla.yallalite94</string>
+            <string>com.yalla.yallalite95</string>
+            <string>com.yalla.yallalite96</string>
+            <string>com.yalla.yallalite97</string>
+            <string>com.yalla.yallalite98</string>
             <string>com.yalla.yallalite99</string>
         </array>
     </dict>
