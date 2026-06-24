@@ -22,19 +22,16 @@ static BOOL s_isMain = NO;
 static int s_msIdx = 0;
 static BOOL s_on = NO;
 static BOOL s_cxx = NO;
-static BOOL s_glitch = NO;
 static BOOL s_lite = NO;
 static int s_slaveCount = 0;
 static int s_totalEver = 0;
 static int s_cxxCount = 0;
-static int s_glitchCount = 0;
 static BOOL s_panelVisible = YES;
 
 // Slave state
 static int s_slvMsIdx = 2;
 static BOOL s_slvLite = NO;
 static BOOL s_slvCxx = NO;
-static BOOL s_slvGlitch = NO;
 static BOOL s_slvSafe = NO;
 static __weak UIView *s_micFace = nil;
 static dispatch_source_t s_timer = NULL;
@@ -50,7 +47,7 @@ static UIWindow *s_overlay = nil;
 static UIView *s_panel = nil;
 static UIView *s_passView = nil;
 static UITextField *s_passField = nil;
-static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil, *s_glitchL = nil;
+static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
 static UIButton *s_onBtn = nil;
 static NSMutableArray *s_nums = nil;
 static UIView *s_circle = nil;
@@ -141,26 +138,14 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     NSString *status = s_on ? @"ON" : @"OFF";
     NSString *liteSuf = s_lite ? [NSString stringWithFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver] : @"";
     NSString *cxxSuf = s_cxx ? [NSString stringWithFormat:@" | cxx✓ %d", s_cxxCount] : @"";
-    NSString *glitchSuf = s_glitch ? @" | Glitch✓" : @"";
     NSString *linkSuf = s_linked ? @" | Link✓" : @"";
-    s_st.text = [NSString stringWithFormat:@"%@ | %@ | Mic %d | %dms%@%@%@%@",
-        s, status, s_sel + 1, kMsVals[s_msIdx], liteSuf, cxxSuf, glitchSuf, linkSuf];
+    s_st.text = [NSString stringWithFormat:@"%@ | %@ | Mic %d | %dms%@%@%@",
+        s, status, s_sel + 1, kMsVals[s_msIdx], liteSuf, cxxSuf, linkSuf];
 
     if (s_lite) s_liteL.text = [NSString stringWithFormat:@"LiTE %d/%d", s_slaveCount, s_totalEver];
     else s_liteL.text = @"LiTE";
     if (s_cxx) s_cxxL.text = [NSString stringWithFormat:@"cxx %d", s_cxxCount];
     else s_cxxL.text = @"cxx";
-    if (s_glitch) {
-        s_glitchL.text = [NSString stringWithFormat:@"Glitch %d", s_glitchCount];
-        s_glitchL.textColor = clr(255,50,50,1);
-        s_glitchL.backgroundColor = clr(80,10,10,0.9);
-        s_glitchL.layer.borderColor = clr(200,30,30,0.9).CGColor;
-    } else {
-        s_glitchL.text = @"Glitch";
-        s_glitchL.textColor = [UIColor whiteColor];
-        s_glitchL.backgroundColor = [UIColor clearColor];
-        s_glitchL.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    }
 }
 
 - (void)num:(UIButton *)b {
@@ -212,8 +197,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     if (s_cxx) {
         s_cxxCount = s_slaveCount;
         [self slvCxxF];
+        [self glitchOn];
     } else {
         [self slvCxxU];
+        [self glitchOff];
     }
     postCmd(s_cxx ? @"cxx.face" : @"cxx.off");
     [self upd];
@@ -228,18 +215,6 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     else s_linked = NO;
     [self slvLite:s_lite];
     postCmd(s_lite ? @"lite.on" : @"lite.off");
-    [self upd];
-}
-
-- (void)glitchT {
-    s_glitch = !s_glitch;
-    if (s_glitch) {
-        s_glitchCount = s_slaveCount;
-        [self glitchOn];
-    } else {
-        [self glitchOff];
-    }
-    postCmd(s_glitch ? @"glitch.on" : @"glitch.off");
     [self upd];
 }
 
@@ -430,10 +405,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     sep2.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
     [s_panel addSubview:sep2];
 
-    // Controls: ON, ms, Glitch, cxx, LiTE, Hide, Data
-    CGFloat cw = (PW - 24 - 6 * 4) / 7;
-    if (cw > 44) cw = 44;
-    CGFloat cTotalW = cw * 7 + 6 * 4;
+    // Controls: ON, ms, cxx, LiTE, Hide, Data
+    CGFloat cw = (PW - 24 - 5 * 4) / 6;
+    if (cw > 52) cw = 52;
+    CGFloat cTotalW = cw * 6 + 5 * 4;
     CGFloat cStartX = (PW - cTotalW) / 2;
 
     s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -444,15 +419,15 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_onBtn.layer.cornerRadius = 8;
     s_onBtn.layer.borderWidth = 1.5;
     s_onBtn.layer.borderColor = clr(0,255,0,0.9).CGColor;
-    s_onBtn.titleLabel.font = [UIFont boldSystemFontOfSize:10];
+    s_onBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
     [s_onBtn addTarget:self action:@selector(onT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:s_onBtn];
 
-    CGFloat msX = cStartX + 1 * (cw + 4);
+    CGFloat msX = cStartX + (cw + 4);
     s_msL = [[UILabel alloc] initWithFrame:CGRectMake(msX, 82, cw, 30)];
     s_msL.text = @"ms:50";
     s_msL.textColor = [UIColor whiteColor];
-    s_msL.font = [UIFont boldSystemFontOfSize:10];
+    s_msL.font = [UIFont boldSystemFontOfSize:11];
     s_msL.textAlignment = NSTextAlignmentCenter;
     s_msL.layer.borderWidth = 1.5;
     s_msL.layer.borderColor = clr(26,26,26,0.6).CGColor;
@@ -465,28 +440,11 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [msBtn addTarget:self action:@selector(msT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:msBtn];
 
-    CGFloat glitchX = cStartX + 2 * (cw + 4);
-    s_glitchL = [[UILabel alloc] initWithFrame:CGRectMake(glitchX, 82, cw, 30)];
-    s_glitchL.text = @"Glitch";
-    s_glitchL.textColor = [UIColor whiteColor];
-    s_glitchL.font = [UIFont boldSystemFontOfSize:10];
-    s_glitchL.textAlignment = NSTextAlignmentCenter;
-    s_glitchL.layer.borderWidth = 1.5;
-    s_glitchL.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    s_glitchL.layer.cornerRadius = 8;
-    s_glitchL.clipsToBounds = YES;
-    [s_panel addSubview:s_glitchL];
-    UIButton *glitchBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    glitchBtn.frame = CGRectMake(glitchX, 82, cw, 30);
-    glitchBtn.backgroundColor = [UIColor clearColor];
-    [glitchBtn addTarget:self action:@selector(glitchT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:glitchBtn];
-
-    CGFloat cxxX = cStartX + 3 * (cw + 4);
+    CGFloat cxxX = cStartX + 2 * (cw + 4);
     s_cxxL = [[UILabel alloc] initWithFrame:CGRectMake(cxxX, 82, cw, 30)];
     s_cxxL.text = @"cxx";
     s_cxxL.textColor = [UIColor whiteColor];
-    s_cxxL.font = [UIFont boldSystemFontOfSize:10];
+    s_cxxL.font = [UIFont boldSystemFontOfSize:11];
     s_cxxL.textAlignment = NSTextAlignmentCenter;
     s_cxxL.layer.borderWidth = 1.5;
     s_cxxL.layer.borderColor = clr(26,26,26,0.6).CGColor;
@@ -499,11 +457,11 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [cxxBtn addTarget:self action:@selector(cxxT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:cxxBtn];
 
-    CGFloat liteX = cStartX + 4 * (cw + 4);
+    CGFloat liteX = cStartX + 3 * (cw + 4);
     s_liteL = [[UILabel alloc] initWithFrame:CGRectMake(liteX, 82, cw, 30)];
     s_liteL.text = @"LiTE";
     s_liteL.textColor = [UIColor whiteColor];
-    s_liteL.font = [UIFont boldSystemFontOfSize:10];
+    s_liteL.font = [UIFont boldSystemFontOfSize:11];
     s_liteL.textAlignment = NSTextAlignmentCenter;
     s_liteL.layer.borderWidth = 1.5;
     s_liteL.layer.borderColor = clr(26,26,26,0.6).CGColor;
@@ -516,7 +474,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [liteBtn addTarget:self action:@selector(liteT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:liteBtn];
 
-    CGFloat hideX = cStartX + 5 * (cw + 4);
+    CGFloat hideX = cStartX + 4 * (cw + 4);
     UIButton *hideBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     hideBtn.frame = CGRectMake(hideX, 82, cw, 30);
     [hideBtn setTitle:@"Hide" forState:UIControlStateNormal];
@@ -525,11 +483,11 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     hideBtn.layer.cornerRadius = 8;
     hideBtn.layer.borderWidth = 1.5;
     hideBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    hideBtn.titleLabel.font = [UIFont boldSystemFontOfSize:10];
+    hideBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
     [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:hideBtn];
 
-    CGFloat dataX = cStartX + 6 * (cw + 4);
+    CGFloat dataX = cStartX + 5 * (cw + 4);
     UIButton *dataBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     dataBtn.frame = CGRectMake(dataX, 82, cw, 30);
     [dataBtn setTitle:@"Data" forState:UIControlStateNormal];
@@ -538,7 +496,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     dataBtn.layer.cornerRadius = 8;
     dataBtn.layer.borderWidth = 1.5;
     dataBtn.layer.borderColor = clr(60,60,60,0.6).CGColor;
-    dataBtn.titleLabel.font = [UIFont boldSystemFontOfSize:10];
+    dataBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
     [dataBtn addTarget:self action:@selector(showCountryPanel) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:dataBtn];
 
@@ -554,9 +512,9 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     // Info text
     UILabel *infoL = [[UILabel alloc] initWithFrame:CGRectMake(8, 136, PW - 16, 16)];
     infoL.textColor = [UIColor whiteColor];
-    infoL.font = [UIFont systemFontOfSize:9];
+    infoL.font = [UIFont systemFontOfSize:10];
     infoL.textAlignment = NSTextAlignmentCenter;
-    infoL.text = @"رقم | LiTE دمج | Glitch | cxx | Data";
+    infoL.text = @"اختر رقم | LiTE لربط الحسابات | cxx قلتش | AsT7aLh";
     infoL.userInteractionEnabled = NO;
     [s_panel addSubview:infoL];
 
@@ -686,6 +644,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 }
 
 - (void)slvCxxU {
+    [self glitchOff];
     dispatch_async(dispatch_get_main_queue(), ^{
         id f = findLiveMikeFace(); if (!f) return;
         callSel(f, @"d6s:result:", @(0), nil);
@@ -763,10 +722,8 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     else if ([c isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvLite:NO]; }
     else if ([c isEqualToString:@"run.on"]) { [self slvRunOn]; }
     else if ([c isEqualToString:@"run.off"]) { [self slvRunOff]; }
-    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafe = NO; [self slvCxxF]; }
-    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafe = YES; [self slvCxxS]; }
-    else if ([c isEqualToString:@"glitch.on"]) { s_slvGlitch = YES; [self glitchOn]; }
-    else if ([c isEqualToString:@"glitch.off"]) { s_slvGlitch = NO; [self glitchOff]; }
+    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafe = NO; [self slvCxxF]; [self glitchOn]; }
+    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafe = YES; [self slvCxxS]; [self glitchOn]; }
     else if ([c hasPrefix:@"speed."]) {
         int ms = [[c substringFromIndex:6] intValue];
         [self slvSpd:ms]; [self slvTimer:ms];
@@ -831,7 +788,7 @@ static void *s_soundID = NULL;
     [s_glitchOverlay addSubview:s_glitchLabel];
 
     UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(0, 72, ow, 16)];
-    sub.text = @"Glitch active";
+    sub.text = @"cxx glitch active";
     sub.textColor = [UIColor whiteColor];
     sub.font = [UIFont systemFontOfSize:10];
     sub.textAlignment = NSTextAlignmentCenter;
@@ -1184,7 +1141,6 @@ static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const
             s_slaveCount++;
             if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
             if (s_cxx) s_cxxCount = s_slaveCount;
-            if (s_glitch) s_glitchCount = s_slaveCount;
             [s_agent upd];
         });
     }
@@ -1510,30 +1466,20 @@ __attribute__((constructor)) static void init() {
 
         s_agent = [[YA alloc] init];
 
-        if (s_isMain) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                s_overlay = findKeyWindow();
-                if (!s_overlay) {
-                    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
-                        dispatch_get_main_queue(), ^{
-                        s_overlay = findKeyWindow();
-                        if (s_overlay) {
-#ifdef YM_DIRECT
-                            [s_agent buildUI];
-#else
-                            [s_agent showPass];
-#endif
-                        }
-                    });
-                    return;
-                }
-#ifdef YM_DIRECT
-                [s_agent buildUI];
-#else
-                [s_agent showPass];
-#endif
-            });
-        }
+        dispatch_async(dispatch_get_main_queue(), ^{
+            s_overlay = findKeyWindow();
+            if (!s_overlay) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
+                    dispatch_get_main_queue(), ^{
+                    s_overlay = findKeyWindow();
+                    if (s_overlay) {
+                        [s_agent buildUI];
+                    }
+                });
+                return;
+            }
+            [s_agent buildUI];
+        });
 
         if (!s_isMain) {
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
