@@ -9,9 +9,10 @@
 static const int kMsVals[] = {50, 25, 10, 5, 1};
 static NSString *const kNames[] = {
     @"Abdulilah", @"Lahlouh", @"Charo", @"Abu Mutab",
-    @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas"
+    @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas",
+    @"Al-Anzi", @"Al-Otaibi"
 };
-#define kNamesCount 8
+#define kNamesCount 10
 
 static int s_sel = -1;
 static int s_instanceId = 0;
@@ -50,6 +51,11 @@ static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
 static UIButton *s_onBtn = nil;
 static NSMutableArray *s_nums = nil;
 static UIView *s_circle = nil;
+
+// Country tool
+static BOOL s_showCountryView = NO;
+static UIView *s_countryPanel = nil;
+static NSArray *s_countries = nil;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
@@ -156,6 +162,18 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+    id f = findLiveMikeFace();
+    if (s_on) {
+        callSel(f, @"selectMic:", @(s_sel+1), nil);
+        callSel(f, @"setm6b:", @(1), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
+        callSel(f, @"tapMic", nil, nil);
+        callSel(f, @"tapOnce", nil, nil);
+        callSel(f, @"isChatRoomTable:", f, nil);
+    } else {
+        callSel(f, @"setm6b:", @(0), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
+    }
     postCmd(s_on ? @"run.on" : @"run.off");
     [self upd];
 }
@@ -163,8 +181,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 - (void)msT {
     s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
     s_msL.text = [NSString stringWithFormat:@"ms:%d", kMsVals[s_msIdx]];
-    postCmd([NSString stringWithFormat:@"speed.%d", kMsVals[s_msIdx]]);
-    postCmd(@"P.M.S");
+    int ms = kMsVals[s_msIdx];
+    [self slvSpd:ms];
+    [self slvTimer:ms];
+    postCmd([NSString stringWithFormat:@"speed.%d", ms]);
     [self upd];
 }
 
@@ -173,9 +193,13 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_cxxL.textColor = s_cxx ? clr(200,50,200,1) : [UIColor whiteColor];
     s_cxxL.backgroundColor = s_cxx ? clr(100,20,100,0.9) : [UIColor clearColor];
     s_cxxL.layer.borderColor = s_cxx ? clr(200,50,200,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
-    if (s_cxx) s_cxxCount = s_slaveCount;
-    if (s_cxx) { [self glitchOn]; }
-    else { [self glitchOff]; }
+    if (s_cxx) {
+        s_cxxCount = s_slaveCount;
+        [self slvCxxF];
+        [self glitchOn];
+    } else {
+        [self slvCxxU];
+    }
     postCmd(s_cxx ? @"cxx.face" : @"cxx.off");
     [self upd];
 }
@@ -187,6 +211,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_lite) s_linked = YES;
     else s_linked = NO;
+    [self slvLite:s_lite];
     postCmd(s_lite ? @"lite.on" : @"lite.off");
     [self upd];
 }
@@ -354,13 +379,13 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     CGFloat numTotalW = PW - 24;
     CGFloat numSpacing = numTotalW / 9;
     s_nums = [NSMutableArray array];
-    for (int i = 1; i <= 10; i++) {
+    for (int i = 0; i < 10; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        CGFloat bx = numStartX + (i - 1) * numSpacing;
+        CGFloat bx = numStartX + i * numSpacing;
         CGFloat bw = numSpacing - 4;
         if (bw < 22) bw = 22;
         b.frame = CGRectMake(bx, 40, bw, 28);
-        [b setTitle:[@(i) stringValue] forState:UIControlStateNormal];
+        [b setTitle:[@(i+1) stringValue] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [b setTitleColor:clr(0,255,68,1) forState:UIControlStateSelected];
         b.backgroundColor = [UIColor blackColor];
@@ -379,10 +404,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     sep2.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
     [s_panel addSubview:sep2];
 
-    // Controls: ON, ms, cxx, LiTE, Hide
-    CGFloat cw = (PW - 24 - 4 * 4) / 5;
-    if (cw > 62) cw = 62;
-    CGFloat cTotalW = cw * 5 + 4 * 4;
+    // Controls: ON, ms, cxx, LiTE, Hide, Data
+    CGFloat cw = (PW - 24 - 5 * 4) / 6;
+    if (cw > 52) cw = 52;
+    CGFloat cTotalW = cw * 6 + 5 * 4;
     CGFloat cStartX = (PW - cTotalW) / 2;
 
     s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -460,6 +485,19 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     hideBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
     [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:hideBtn];
+
+    CGFloat dataX = cStartX + 5 * (cw + 4);
+    UIButton *dataBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    dataBtn.frame = CGRectMake(dataX, 82, cw, 30);
+    [dataBtn setTitle:@"Data" forState:UIControlStateNormal];
+    [dataBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    dataBtn.backgroundColor = clr(40,40,40,0.9);
+    dataBtn.layer.cornerRadius = 8;
+    dataBtn.layer.borderWidth = 1.5;
+    dataBtn.layer.borderColor = clr(60,60,60,0.6).CGColor;
+    dataBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [dataBtn addTarget:self action:@selector(showCountryPanel) forControlEvents:UIControlEventTouchUpInside];
+    [s_panel addSubview:dataBtn];
 
     // Status
     s_st = [[UILabel alloc] initWithFrame:CGRectMake(8, 118, PW - 16, 16)];
@@ -642,7 +680,8 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 - (void)slvRunOn {
     dispatch_async(dispatch_get_main_queue(), ^{
         id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"selectMic:", @(s_instanceId+1), nil);
+        int mic = s_isMain ? (s_sel >= 0 ? s_sel+1 : s_instanceId+1) : s_instanceId+1;
+        callSel(f, @"selectMic:", @(mic), nil);
         callSel(f, @"setm6b:", @(1), nil);
         callSel(f, @"masterSetRunUIOnly:", @(1), nil);
         callSel(f, @"tapMic", nil, nil);
@@ -679,9 +718,9 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
         s_slvCxx = NO; s_slvSafe = NO;
         [self slvCxxU];
     } else if ([c isEqualToString:@"link.on"]) {
-        s_linked = YES;
+        s_linked = YES; [self slvLite:YES];
     } else if ([c isEqualToString:@"link.off"]) {
-        s_linked = NO;
+        s_linked = NO; [self slvLite:NO];
     }
 }
 
@@ -796,6 +835,266 @@ static void *s_soundID = NULL;
         }
     } @catch(NSException *e) {
         NSLog(@"[YA] glitchOff error: %@", e.reason);
+    }
+}
+
+// ==================== Country tool (from ASTEngine format) ====================
+- (void)loadCountries {
+    if (s_countries) return;
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"nationEn" ofType:@"json"];
+    if (!path) path = [[NSBundle mainBundle] pathForResource:@"nationAr" ofType:@"json"];
+    if (!path) { s_countries = @[]; return; }
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    if (!data) { s_countries = @[]; return; }
+    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    if (!dict) { s_countries = @[]; return; }
+    s_countries = dict[@"all"];
+}
+
+- (NSString *)astFormatForMic:(int)idx {
+    CGFloat bx = s_astBXs[idx] > 0 ? s_astBXs[idx] : 0;
+    CGFloat by = s_astBYs[idx] > 0 ? s_astBYs[idx] : 0;
+    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
+        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
+}
+
+- (void)showMainPanel {
+    s_showCountryView = NO;
+    s_countryPanel.hidden = YES;
+    s_panel.hidden = NO;
+}
+
+- (void)showCountryPanel {
+    [self loadCountries];
+    s_showCountryView = YES;
+    s_panel.hidden = YES;
+    [self buildCountryUI];
+    [self updCountryUI];
+}
+
+- (void)buildCountryUI {
+    if (s_countryPanel) { s_countryPanel.hidden = NO; return; }
+    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+    CGFloat PW = 340;
+    if (sw < PW + 16) PW = sw - 16;
+    CGFloat PX = (sw - PW) / 2;
+    CGFloat PY = 100;
+
+    s_countryPanel = [[UIView alloc] initWithFrame:CGRectMake(PX, PY, PW, 320)];
+    s_countryPanel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.92];
+    s_countryPanel.layer.cornerRadius = 18;
+    s_countryPanel.layer.borderWidth = 2;
+    s_countryPanel.layer.borderColor = [UIColor blackColor].CGColor;
+    s_countryPanel.clipsToBounds = YES;
+    s_countryPanel.tag = 1000;
+
+    // Title
+    UILabel *titleL = [[UILabel alloc] initWithFrame:CGRectMake(0, 8, PW, 20)];
+    titleL.text = @"AST7ALH - Countries";
+    titleL.textColor = [UIColor whiteColor];
+    titleL.font = [UIFont boldSystemFontOfSize:14];
+    titleL.textAlignment = NSTextAlignmentCenter;
+    [s_countryPanel addSubview:titleL];
+
+    // Subtitle
+    UILabel *subL = [[UILabel alloc] initWithFrame:CGRectMake(0, 26, PW, 14)];
+    subL.text = @"Mic Coordinates per Country";
+    subL.textColor = clr(150,150,150,1);
+    subL.font = [UIFont systemFontOfSize:10];
+    subL.textAlignment = NSTextAlignmentCenter;
+    [s_countryPanel addSubview:subL];
+
+    UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(8, 44, PW-16, 1)];
+    sep.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
+    [s_countryPanel addSubview:sep];
+
+    // Country list - scrollable
+    UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 48, PW, 190)];
+    scroll.backgroundColor = [UIColor clearColor];
+    scroll.showsVerticalScrollIndicator = YES;
+
+    CGFloat yOff = 0;
+    CGFloat rowH = 36;
+    int maxCountries = (int)MIN(s_countries.count, 10);
+    for (int i = 0; i < maxCountries; i++) {
+        NSDictionary *c = s_countries[i];
+        NSString *name = c[@"countryName"] ?: @"";
+        NSString *iso = c[@"isoCode"] ?: @"";
+        NSNumber *cc = c[@"countryCode"] ?: @(0);
+        NSString *ast = [self astFormatForMic:i];
+
+        UIView *row = [[UIView alloc] initWithFrame:CGRectMake(8, yOff, PW-16, rowH-2)];
+        row.backgroundColor = clr(15,15,15,0.6);
+        row.layer.cornerRadius = 6;
+
+        // Mic number
+        UILabel *micL = [[UILabel alloc] initWithFrame:CGRectMake(4, 0, 24, rowH-2)];
+        micL.text = [@(i+1) stringValue];
+        micL.textColor = clr(0,255,68,1);
+        micL.font = [UIFont boldSystemFontOfSize:11];
+        micL.textAlignment = NSTextAlignmentCenter;
+        [row addSubview:micL];
+
+        // ISO code
+        UILabel *isoL = [[UILabel alloc] initWithFrame:CGRectMake(30, 0, 30, rowH-2)];
+        isoL.text = iso;
+        isoL.textColor = clr(200,200,200,1);
+        isoL.font = [UIFont boldSystemFontOfSize:10];
+        isoL.textAlignment = NSTextAlignmentCenter;
+        [row addSubview:isoL];
+
+        // Country name
+        UILabel *nameL = [[UILabel alloc] initWithFrame:CGRectMake(62, 0, 100, rowH-2)];
+        nameL.text = name;
+        nameL.textColor = [UIColor whiteColor];
+        nameL.font = [UIFont systemFontOfSize:10];
+        nameL.textAlignment = NSTextAlignmentLeft;
+        [row addSubview:nameL];
+
+        // Phone code
+        UILabel *codeL = [[UILabel alloc] initWithFrame:CGRectMake(164, 0, 50, rowH-2)];
+        codeL.text = [NSString stringWithFormat:@"+%@", cc];
+        codeL.textColor = clr(100,180,255,1);
+        codeL.font = [UIFont systemFontOfSize:9];
+        codeL.textAlignment = NSTextAlignmentCenter;
+        [row addSubview:codeL];
+
+        // AST7ALH coordinate
+        UILabel *astL = [[UILabel alloc] initWithFrame:CGRectMake(210, 0, PW-220, rowH-2)];
+        astL.text = ast;
+        astL.textColor = clr(255,200,0,1);
+        astL.font = [UIFont systemFontOfSize:9];
+        astL.textAlignment = NSTextAlignmentRight;
+        [row addSubview:astL];
+
+        // Select button
+        UIButton *selBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        selBtn.frame = CGRectMake(0, 0, PW-16, rowH-2);
+        selBtn.backgroundColor = [UIColor clearColor];
+        selBtn.tag = i;
+        [selBtn addTarget:self action:@selector(countrySel:) forControlEvents:UIControlEventTouchUpInside];
+        [row addSubview:selBtn];
+
+        [scroll addSubview:row];
+        yOff += rowH;
+    }
+
+    scroll.contentSize = CGSizeMake(PW-16, yOff + 4);
+    [s_countryPanel addSubview:scroll];
+
+    // Bottom bar: On/Off, Link, Back
+    CGFloat btnW = (PW - 32) / 3;
+    CGFloat btnY = 246;
+    CGFloat btnH = 30;
+
+    // On/Off
+    UIButton *onOffBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    onOffBtn.frame = CGRectMake(8, btnY, btnW, btnH);
+    [onOffBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
+    [onOffBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    onOffBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
+    onOffBtn.layer.cornerRadius = 8;
+    onOffBtn.layer.borderWidth = 1.5;
+    onOffBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+    onOffBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [onOffBtn addTarget:self action:@selector(countryOnOff) forControlEvents:UIControlEventTouchUpInside];
+    [s_countryPanel addSubview:onOffBtn];
+
+    // Account Linking (ربط الحسابات)
+    UIButton *linkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    linkBtn.frame = CGRectMake(8 + (btnW + 8), btnY, btnW, btnH);
+    [linkBtn setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
+    [linkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    linkBtn.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
+    linkBtn.layer.cornerRadius = 8;
+    linkBtn.layer.borderWidth = 1.5;
+    linkBtn.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
+    linkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [linkBtn addTarget:self action:@selector(countryLink) forControlEvents:UIControlEventTouchUpInside];
+    [s_countryPanel addSubview:linkBtn];
+
+    // Back to main
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.frame = CGRectMake(8 + 2*(btnW + 8), btnY, btnW, btnH);
+    [backBtn setTitle:@"Back" forState:UIControlStateNormal];
+    [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    backBtn.backgroundColor = [UIColor blackColor];
+    backBtn.layer.cornerRadius = 8;
+    backBtn.layer.borderWidth = 1.5;
+    backBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
+    backBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
+    [backBtn addTarget:self action:@selector(showMainPanel) forControlEvents:UIControlEventTouchUpInside];
+    [s_countryPanel addSubview:backBtn];
+
+    // Status label
+    UILabel *stL = [[UILabel alloc] initWithFrame:CGRectMake(8, 280, PW-16, 14)];
+    stL.textColor = [UIColor whiteColor];
+    stL.font = [UIFont systemFontOfSize:9];
+    stL.textAlignment = NSTextAlignmentCenter;
+    stL.text = [NSString stringWithFormat:@"%d countries | AST7ALH-10TH-XXXX-XXXX", (int)s_countries.count];
+    [s_countryPanel addSubview:stL];
+
+    // Draggable
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panP:)];
+    [s_countryPanel addGestureRecognizer:pan];
+
+    [s_overlay addSubview:s_countryPanel];
+}
+
+- (void)countrySel:(UIButton *)b {
+    int idx = (int)b.tag;
+    if (idx >= 0 && idx < 10) {
+        s_sel = idx;
+        for (int i = 0; i < (int)s_nums.count; i++) {
+            UIButton *nb = s_nums[i];
+            nb.selected = (i == idx);
+        }
+    }
+    [self upd];
+}
+
+- (void)countryOnOff {
+    if (s_sel < 0) return;
+    s_on = !s_on;
+    id f = findLiveMikeFace();
+    if (s_on) {
+        callSel(f, @"selectMic:", @(s_sel+1), nil);
+        callSel(f, @"setm6b:", @(1), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
+        callSel(f, @"tapMic", nil, nil);
+        callSel(f, @"tapOnce", nil, nil);
+        callSel(f, @"isChatRoomTable:", f, nil);
+    } else {
+        callSel(f, @"setm6b:", @(0), nil);
+        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
+    }
+    postCmd(s_on ? @"run.on" : @"run.off");
+    [self updCountryUI];
+}
+
+- (void)countryLink {
+    s_linked = !s_linked;
+    s_lite = s_linked;
+    [self slvLite:s_linked];
+    postCmd(s_linked ? @"link.on" : @"link.off");
+    [self updCountryUI];
+}
+
+- (void)updCountryUI {
+    for (UIView *sv in s_countryPanel.subviews) {
+        if ([sv isKindOfClass:[UIButton class]]) {
+            UIButton *b = (UIButton *)sv;
+            NSString *t = [b titleForState:UIControlStateNormal];
+            if ([t isEqualToString:@"ON"] || [t isEqualToString:@"OFF"]) {
+                [b setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
+                b.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
+                b.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+            } else if ([t hasPrefix:@"ربط"]) {
+                [b setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
+                b.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
+                b.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
+            }
+        }
     }
 }
 
