@@ -9,41 +9,23 @@
 static const int kMsVals[] = {50, 25, 10, 5, 1};
 static NSString *const kNames[] = {
     @"Abdulilah", @"Lahlouh", @"Charo", @"Abu Mutab",
-    @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas",
-    @"Al-Anzi", @"Al-Otaibi"
+    @"Saeed", @"Al-Kaed", @"Al-Shammarah", @"Al-Habbas"
 };
-#define kNamesCount 10
+#define kNamesCount 8
 
 static int s_sel = -1;
 static int s_instanceId = 0;
 static BOOL s_isMain = NO;
-
-// Master state
 static int s_msIdx = 0;
 static BOOL s_on = NO;
 static BOOL s_cxx = NO;
 static BOOL s_lite = NO;
+static BOOL s_linked = NO;
 static int s_slaveCount = 0;
 static int s_totalEver = 0;
 static int s_cxxCount = 0;
-static BOOL s_panelVisible = YES;
+static int s_showData = 0;
 
-// Slave state
-static int s_slvMsIdx = 2;
-static BOOL s_slvLite = NO;
-static BOOL s_slvCxx = NO;
-static BOOL s_slvSafe = NO;
-static __weak UIView *s_micFace = nil;
-static dispatch_source_t s_timer = NULL;
-
-// AST/Link state
-static BOOL s_linked = NO;
-static CGFloat s_astBXs[10] = {160,186,212,238,264,290,316,342,368,394};
-static CGFloat s_astBYs[10] = {360,360,360,360,360,360,360,360,360,360};
-static CGFloat s_astPX = -1, s_astPY = -1;
-
-// UI
-static UIWindow *s_overlay = nil;
 static UIView *s_panel = nil;
 static UIView *s_passView = nil;
 static UITextField *s_passField = nil;
@@ -51,42 +33,41 @@ static UILabel *s_st = nil, *s_msL = nil, *s_cxxL = nil, *s_liteL = nil;
 static UIButton *s_onBtn = nil;
 static NSMutableArray *s_nums = nil;
 static UIView *s_circle = nil;
+static BOOL s_visible = YES;
+static dispatch_source_t s_timer = NULL;
+
+// Glitch
+static UIView *s_glitchOverlay = nil;
+static UILabel *s_glitchLabel = nil;
+
+// AST coords
+static CGFloat s_astBXs[10] = {160,186,212,238,264,290,316,342,368,394};
+static CGFloat s_astBYs[10] = {360,360,360,360,360,360,360,360,360,360};
+static CGFloat s_astPX = -1, s_astPY = -1;
 
 // Country tool
-static BOOL s_showCountryView = NO;
-static UIView *s_countryPanel = nil;
+static UIView *s_dataPanel = nil;
 static NSArray *s_countries = nil;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
 }
 
-// Method hooks (no Substrate needed)
-static UIWindow *findKeyWindow(void);
-static IMP s_orig_didMoveToWindow = NULL;
-static IMP s_orig_viewDidAppear = NULL;
-
-static void hook_viewDidAppear(id self, SEL _cmd, BOOL animated) {
-    ((void(*)(id,SEL,BOOL))s_orig_viewDidAppear)(self, _cmd, animated);
-    if (!s_overlay) s_overlay = findKeyWindow();
+static UILabel *mkLab(CGFloat x, CGFloat y, CGFloat w, CGFloat h, NSString *t, CGFloat fs) {
+    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
+    lb.text = t;
+    lb.textColor = [UIColor whiteColor];
+    lb.font = [UIFont boldSystemFontOfSize:fs];
+    lb.textAlignment = NSTextAlignmentCenter;
+    lb.userInteractionEnabled = NO;
+    return lb;
 }
 
-static void hook_didMoveToWindow(id self, SEL _cmd) {
-    ((void(*)(id,SEL))s_orig_didMoveToWindow)(self, _cmd);
-    if (!self) return;
-    NSString *cn = NSStringFromClass([self class]);
-    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"])
-        s_micFace = self;
-}
-
-static void setupHooks(void) {
-    static dispatch_once_t once;
-    dispatch_once(&once, ^{
-        Method m1 = class_getInstanceMethod([UIView class], @selector(didMoveToWindow));
-        if (m1) { s_orig_didMoveToWindow = method_getImplementation(m1); method_setImplementation(m1, (IMP)hook_didMoveToWindow); }
-        Method m2 = class_getInstanceMethod([UIViewController class], @selector(viewDidAppear:));
-        if (m2) { s_orig_viewDidAppear = method_getImplementation(m2); method_setImplementation(m2, (IMP)hook_viewDidAppear); }
-    });
+static UIView *mkSep(CGFloat x, CGFloat y, CGFloat w) {
+    UIView *v = [[UIView alloc] initWithFrame:CGRectMake(x, y, w, 1)];
+    v.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
+    v.userInteractionEnabled = NO;
+    return v;
 }
 
 static void postCmd(NSString *cmd) {
@@ -103,52 +84,60 @@ static int getInstanceId(void) {
 }
 
 static UIView *findLiveMikeFace(void) {
-    if (s_micFace) return s_micFace;
     for (UIWindow *w in [UIApplication sharedApplication].windows) {
         if (!w || w.hidden) continue;
         __block UIView *found = nil;
         void (^search)(UIView *) = ^(UIView *v) {
             if (found) return;
+            if (!v) return;
             NSString *cn = NSStringFromClass([v class]);
             if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) { found = v; return; }
             for (UIView *sv in v.subviews) search(sv);
         };
         search(w);
-        if (found) { s_micFace = found; return found; }
+        if (found) return found;
     }
     return nil;
 }
 
-static void callSel(id obj, NSString *selName, id a1, id a2) {
+static void findAllMics(UIView *v, NSMutableArray *mics) {
+    if (!v) return;
+    NSString *cn = NSStringFromClass([v class]);
+    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"])
+        [mics addObject:v];
+    for (UIView *sv in v.subviews) findAllMics(sv, mics);
+}
+
+static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     @try {
         SEL s = NSSelectorFromString(selName);
         if ([obj respondsToSelector:s]) {
-            if (a2) ((void(*)(id,SEL,id,id))[obj methodForSelector:s])(obj,s,a1,a2);
-            else if (a1) ((void(*)(id,SEL,id))[obj methodForSelector:s])(obj,s,a1);
+            if (arg2) ((void(*)(id,SEL,id,id))[obj methodForSelector:s])(obj,s,arg1,arg2);
+            else if (arg1) ((void(*)(id,SEL,id))[obj methodForSelector:s])(obj,s,arg1);
             else ((void(*)(id,SEL))[obj methodForSelector:s])(obj,s);
         }
     } @catch(NSException *e) {}
 }
 
-@interface YA : NSObject @end
-@implementation YA
+@interface _YM : NSObject @end
+@implementation _YM
 
-- (void)upd {
-    NSString *s = s_sel >= 0 ? kNames[s_sel] : @"None";
++ (void)upd {
+    NSString *s = (s_sel >= 0 && s_sel < kNamesCount) ? kNames[s_sel] :
+        (s_sel >= 0 ? [NSString stringWithFormat:@"Mic%d", s_sel+1] : @"None");
     NSString *status = s_on ? @"ON" : @"OFF";
     NSString *liteSuf = s_lite ? [NSString stringWithFormat:@" | LiTE✓ %d/%d", s_slaveCount, s_totalEver] : @"";
     NSString *cxxSuf = s_cxx ? [NSString stringWithFormat:@" | cxx✓ %d", s_cxxCount] : @"";
     NSString *linkSuf = s_linked ? @" | Link✓" : @"";
     s_st.text = [NSString stringWithFormat:@"%@ | %@ | Mic %d | %dms%@%@%@",
         s, status, s_sel + 1, kMsVals[s_msIdx], liteSuf, cxxSuf, linkSuf];
-
     if (s_lite) s_liteL.text = [NSString stringWithFormat:@"LiTE %d/%d", s_slaveCount, s_totalEver];
     else s_liteL.text = @"LiTE";
     if (s_cxx) s_cxxL.text = [NSString stringWithFormat:@"cxx %d", s_cxxCount];
     else s_cxxL.text = @"cxx";
 }
 
-- (void)num:(UIButton *)b {
++ (void)num:(UIButton *)b {
     if (s_on) return;
     int idx = (int)b.tag;
     s_sel = idx;
@@ -156,88 +145,449 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [self upd];
 }
 
-- (void)onT {
++ (void)onT {
     if (s_sel < 0) s_sel = 0;
     s_on = !s_on;
-    int mic = s_sel + 1;
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    id f = findLiveMikeFace();
-    if (s_on) {
-        callSel(f, @"selectMic:", @(mic), nil);
-        callSel(f, @"setm6b:", @(1), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
-        callSel(f, @"tapMic", nil, nil);
-        callSel(f, @"tapOnce", nil, nil);
-        callSel(f, @"isChatRoomTable:", f, nil);
-    } else {
-        callSel(f, @"setm6b:", @(0), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
-    }
     postCmd(s_on ? @"run.on" : @"run.off");
     [self upd];
 }
 
-- (void)msT {
++ (void)msT {
     s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
     s_msL.text = [NSString stringWithFormat:@"ms:%d", kMsVals[s_msIdx]];
-    int ms = kMsVals[s_msIdx];
-    [self slvSpd:ms];
-    [self slvTimer:ms];
-    postCmd([NSString stringWithFormat:@"speed.%d", ms]);
+    postCmd([NSString stringWithFormat:@"speed.%d", kMsVals[s_msIdx]]);
+    postCmd(@"P.M.S");
     [self upd];
 }
 
-- (void)cxxT {
++ (void)cxxT {
     s_cxx = !s_cxx;
     s_cxxL.textColor = s_cxx ? clr(200,50,200,1) : [UIColor whiteColor];
     s_cxxL.backgroundColor = s_cxx ? clr(100,20,100,0.9) : [UIColor clearColor];
     s_cxxL.layer.borderColor = s_cxx ? clr(200,50,200,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_cxx) {
         s_cxxCount = s_slaveCount;
-        [self slvCxxF];
         [self glitchOn];
     } else {
-        [self slvCxxU];
         [self glitchOff];
     }
-    postCmd(s_cxx ? @"cxx.face" : @"cxx.off");
+    postCmd(s_cxx ? @"cxx.face" : @"cxx.safe");
     [self upd];
 }
 
-- (void)liteT {
++ (void)liteT {
     s_lite = !s_lite;
     s_liteL.textColor = s_lite ? clr(50,50,255,1) : [UIColor whiteColor];
     s_liteL.backgroundColor = s_lite ? clr(26,26,150,0.9) : [UIColor clearColor];
     s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_lite) s_linked = YES;
     else s_linked = NO;
-    [self slvLite:s_lite];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSMutableArray *mics = [NSMutableArray array];
+        for (UIWindow *w in [UIApplication sharedApplication].windows) {
+            if (!w || w.hidden) continue;
+            findAllMics(w, mics);
+        }
+        for (UIView *f in mics) {
+            f.hidden = s_lite;
+            for (UIView *sv in f.subviews) sv.hidden = s_lite;
+            callSel(f, @"lt_rippleButtonAction:", @(s_lite?1:0), nil);
+        }
+    });
     postCmd(s_lite ? @"lite.on" : @"lite.off");
     [self upd];
 }
 
-- (void)showPanel {
-    s_panelVisible = YES;
++ (void)showPanel {
+    if (s_dataPanel && !s_dataPanel.hidden) return;
     s_panel.hidden = NO;
     s_circle.hidden = YES;
+    s_visible = YES;
 }
 
-- (void)hideT {
-    s_panelVisible = NO;
++ (void)hideT {
+    s_visible = NO;
     s_panel.hidden = YES;
     s_circle.hidden = NO;
 }
 
+// ==================== Glitch ====================
 
++ (void)createOverlay {
+    if (s_glitchOverlay) return;
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (!kw) return;
+    CGFloat sw = kw.bounds.size.width;
+    CGFloat ow = 200, oh = 120;
+    s_glitchOverlay = [[UIView alloc] initWithFrame:CGRectMake((sw-ow)/2, 80, ow, oh)];
+    s_glitchOverlay.backgroundColor = clr(200,0,0,0.85);
+    s_glitchOverlay.layer.cornerRadius = 14;
+    s_glitchOverlay.layer.borderWidth = 2;
+    s_glitchOverlay.layer.borderColor = clr(255,200,0,0.9).CGColor;
+    s_glitchOverlay.clipsToBounds = YES;
+    s_glitchOverlay.alpha = 0;
+    s_glitchOverlay.tag = 1001;
+    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, ow, 24)];
+    title.text = @"⚠️ GLITCH";
+    title.textColor = [UIColor whiteColor];
+    title.font = [UIFont boldSystemFontOfSize:18];
+    title.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:title];
+    s_glitchLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 48, ow, 20)];
+    s_glitchLabel.text = @"TARGET LOCKED";
+    s_glitchLabel.textColor = clr(255,200,0,1);
+    s_glitchLabel.font = [UIFont boldSystemFontOfSize:13];
+    s_glitchLabel.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:s_glitchLabel];
+    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(0, 72, ow, 16)];
+    sub.text = @"cxx glitch active";
+    sub.textColor = [UIColor whiteColor];
+    sub.font = [UIFont systemFontOfSize:10];
+    sub.textAlignment = NSTextAlignmentCenter;
+    [s_glitchOverlay addSubview:sub];
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panGlitch:)];
+    [s_glitchOverlay addGestureRecognizer:pan];
+    [kw addSubview:s_glitchOverlay];
+    [UIView animateWithDuration:0.3 animations:^{
+        s_glitchOverlay.alpha = 1;
+        s_glitchOverlay.transform = CGAffineTransformMakeScale(1.1, 1.1);
+    } completion:^(BOOL finished) {
+        [UIView animateWithDuration:0.15 animations:^{
+            s_glitchOverlay.transform = CGAffineTransformIdentity;
+        }];
+    }];
+}
 
-- (void)submitPass {
++ (void)glitchOn {
+    @try { [self createOverlay]; } @catch(NSException *e) {}
+}
+
++ (void)glitchOff {
+    @try {
+        if (s_glitchOverlay) {
+            [UIView animateWithDuration:0.2 animations:^{
+                s_glitchOverlay.alpha = 0;
+                s_glitchOverlay.transform = CGAffineTransformMakeScale(0.8, 0.8);
+            } completion:^(BOOL finished) {
+                [s_glitchOverlay removeFromSuperview];
+                s_glitchOverlay = nil;
+                s_glitchLabel = nil;
+            }];
+        }
+    } @catch(NSException *e) {}
+}
+
++ (void)panGlitch:(UIPanGestureRecognizer *)g {
+    static CGPoint sc;
+    UIView *v = g.view;
+    if (g.state == 1) sc = v.center;
+    if (g.state == 2) {
+        CGPoint t = [g translationInView:v.superview];
+        v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
+    }
+}
+
+// ==================== AST7ALH / Country Data ====================
+
++ (NSString *)astFormatForMic:(int)idx {
+    if (idx < 0 || idx >= 10) idx = 0;
+    CGFloat bx = s_astBXs[idx];
+    CGFloat by = s_astBYs[idx];
+    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
+        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
+}
+
++ (void)loadCountries {
+    if (s_countries) return;
+    NSString *path = [[NSBundle mainBundle] pathForResource:@"nationEn" ofType:@"json"];
+    if (!path) path = [[NSBundle mainBundle] pathForResource:@"nationAr" ofType:@"json"];
+    if (!path) { s_countries = @[]; return; }
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    if (!data) { s_countries = @[]; return; }
+    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+    s_countries = dict[@"all"] ?: @[];
+}
+
++ (void)saveASTCoords {
+    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+    for (int i = 0; i < 10; i++) {
+        [ud setDouble:s_astBXs[i] forKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
+        [ud setDouble:s_astBYs[i] forKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
+    }
+    [ud setDouble:s_astPX forKey:@"AST_panelX"];
+    [ud setDouble:s_astPY forKey:@"AST_panelY"];
+    [ud synchronize];
+}
+
++ (void)loadASTCoords {
+    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
+    for (int i = 0; i < 10; i++) {
+        CGFloat v = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
+        if (v > 0) s_astBXs[i] = v;
+        v = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
+        if (v > 0) s_astBYs[i] = v;
+    }
+}
+
++ (void)dataT {
+    [self loadCountries];
+    s_showData = 1;
+    s_panel.hidden = YES;
+    s_circle.hidden = YES;
+    [self buildDataUI];
+    [self updDataUI];
+}
+
++ (void)backToMain {
+    s_showData = 0;
+    s_dataPanel.hidden = YES;
+    s_panel.hidden = NO;
+}
+
++ (void)buildDataUI {
+    if (s_dataPanel) { s_dataPanel.hidden = NO; return; }
+    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
+    CGFloat PW = 340;
+    if (sw < PW + 16) PW = sw - 16;
+    CGFloat PX = (sw - PW) / 2;
+    CGFloat PY = 100;
+
+    s_dataPanel = [[UIView alloc] initWithFrame:CGRectMake(PX, PY, PW, 320)];
+    s_dataPanel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.92];
+    s_dataPanel.layer.cornerRadius = 18;
+    s_dataPanel.layer.borderWidth = 2;
+    s_dataPanel.layer.borderColor = [UIColor blackColor].CGColor;
+    s_dataPanel.clipsToBounds = YES;
+    s_dataPanel.tag = 1000;
+
+    UILabel *titleL = [[UILabel alloc] initWithFrame:CGRectMake(0, 8, PW, 20)];
+    titleL.text = @"AST7ALH - Countries";
+    titleL.textColor = [UIColor whiteColor];
+    titleL.font = [UIFont boldSystemFontOfSize:14];
+    titleL.textAlignment = NSTextAlignmentCenter;
+    titleL.userInteractionEnabled = NO;
+    [s_dataPanel addSubview:titleL];
+
+    UILabel *subL = [[UILabel alloc] initWithFrame:CGRectMake(0, 26, PW, 14)];
+    subL.text = [NSString stringWithFormat:@"%lu countries loaded", (unsigned long)s_countries.count];
+    subL.textColor = clr(150,150,150,1);
+    subL.font = [UIFont systemFontOfSize:10];
+    subL.textAlignment = NSTextAlignmentCenter;
+    subL.userInteractionEnabled = NO;
+    [s_dataPanel addSubview:subL];
+
+    [s_dataPanel addSubview:mkSep(8, 44, PW-16)];
+
+    // Scroll list
+    UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 48, PW, 188)];
+    scroll.backgroundColor = [UIColor clearColor];
+    scroll.showsVerticalScrollIndicator = YES;
+
+    CGFloat yOff = 0;
+    CGFloat rowH = 34;
+    int maxCnt = (int)MIN(s_countries.count, 10);
+    for (int i = 0; i < maxCnt; i++) {
+        NSDictionary *c = s_countries[i];
+        NSString *name = c[@"countryName"] ?: @"";
+        NSString *iso = c[@"isoCode"] ?: @"";
+        NSNumber *cc = c[@"countryCode"] ?: @(0);
+        NSString *ast = [self astFormatForMic:i];
+
+        UIView *row = [[UIView alloc] initWithFrame:CGRectMake(8, yOff, PW-16, rowH-2)];
+        row.backgroundColor = clr(15,15,15,0.6);
+        row.layer.cornerRadius = 6;
+
+        UILabel *micL = [[UILabel alloc] initWithFrame:CGRectMake(4, 0, 22, rowH-2)];
+        micL.text = [@(i+1) stringValue];
+        micL.textColor = clr(0,255,68,1);
+        micL.font = [UIFont boldSystemFontOfSize:11];
+        micL.textAlignment = NSTextAlignmentCenter;
+        micL.userInteractionEnabled = NO;
+        [row addSubview:micL];
+
+        UILabel *isoL = [[UILabel alloc] initWithFrame:CGRectMake(28, 0, 28, rowH-2)];
+        isoL.text = iso;
+        isoL.textColor = clr(200,200,200,1);
+        isoL.font = [UIFont boldSystemFontOfSize:10];
+        isoL.textAlignment = NSTextAlignmentCenter;
+        isoL.userInteractionEnabled = NO;
+        [row addSubview:isoL];
+
+        UILabel *nameL = [[UILabel alloc] initWithFrame:CGRectMake(58, 0, 90, rowH-2)];
+        nameL.text = name;
+        nameL.textColor = [UIColor whiteColor];
+        nameL.font = [UIFont systemFontOfSize:10];
+        nameL.textAlignment = NSTextAlignmentLeft;
+        nameL.userInteractionEnabled = NO;
+        [row addSubview:nameL];
+
+        UILabel *codeL = [[UILabel alloc] initWithFrame:CGRectMake(150, 0, 40, rowH-2)];
+        codeL.text = [NSString stringWithFormat:@"+%@", cc];
+        codeL.textColor = clr(100,180,255,1);
+        codeL.font = [UIFont systemFontOfSize:9];
+        codeL.textAlignment = NSTextAlignmentCenter;
+        codeL.userInteractionEnabled = NO;
+        [row addSubview:codeL];
+
+        UILabel *astL = [[UILabel alloc] initWithFrame:CGRectMake(192, 0, PW-210, rowH-2)];
+        astL.text = ast;
+        astL.textColor = clr(255,200,0,1);
+        astL.font = [UIFont systemFontOfSize:8];
+        astL.textAlignment = NSTextAlignmentRight;
+        astL.adjustsFontSizeToFitWidth = YES;
+        astL.minimumScaleFactor = 0.6;
+        astL.userInteractionEnabled = NO;
+        [row addSubview:astL];
+
+        UIButton *selBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+        selBtn.frame = CGRectMake(0, 0, PW-16, rowH-2);
+        selBtn.backgroundColor = [UIColor clearColor];
+        selBtn.tag = i;
+        [selBtn addTarget:self action:@selector(dataSel:) forControlEvents:UIControlEventTouchUpInside];
+        [row addSubview:selBtn];
+
+        [scroll addSubview:row];
+        yOff += rowH;
+    }
+    scroll.contentSize = CGSizeMake(PW-16, yOff+4);
+    [s_dataPanel addSubview:scroll];
+
+    // Bottom buttons
+    CGFloat btnW = (PW - 32) / 3;
+    CGFloat btnY = 244;
+    CGFloat btnH = 28;
+    CGFloat btnF = 10;
+
+    UIButton *onOffBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    onOffBtn.frame = CGRectMake(8, btnY, btnW, btnH);
+    [onOffBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
+    [onOffBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    onOffBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
+    onOffBtn.layer.cornerRadius = 8;
+    onOffBtn.layer.borderWidth = 1.5;
+    onOffBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+    onOffBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
+    [onOffBtn addTarget:self action:@selector(dataOnOff) forControlEvents:UIControlEventTouchUpInside];
+    [s_dataPanel addSubview:onOffBtn];
+
+    UIButton *linkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    linkBtn.frame = CGRectMake(8 + (btnW+8), btnY, btnW, btnH);
+    [linkBtn setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
+    [linkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    linkBtn.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
+    linkBtn.layer.cornerRadius = 8;
+    linkBtn.layer.borderWidth = 1.5;
+    linkBtn.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
+    linkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
+    [linkBtn addTarget:self action:@selector(dataLink) forControlEvents:UIControlEventTouchUpInside];
+    [s_dataPanel addSubview:linkBtn];
+
+    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    backBtn.frame = CGRectMake(8+2*(btnW+8), btnY, btnW, btnH);
+    [backBtn setTitle:@"Back" forState:UIControlStateNormal];
+    [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    backBtn.backgroundColor = [UIColor blackColor];
+    backBtn.layer.cornerRadius = 8;
+    backBtn.layer.borderWidth = 1.5;
+    backBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
+    backBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
+    [backBtn addTarget:self action:@selector(backToMain) forControlEvents:UIControlEventTouchUpInside];
+    [s_dataPanel addSubview:backBtn];
+
+    // Status line
+    UILabel *stL = [[UILabel alloc] initWithFrame:CGRectMake(8, 278, PW-16, 14)];
+    stL.textColor = [UIColor whiteColor];
+    stL.font = [UIFont systemFontOfSize:9];
+    stL.textAlignment = NSTextAlignmentCenter;
+    stL.text = [NSString stringWithFormat:@"%lu countries | AST7ALH-10TH-XXXX-XXXX",
+        (unsigned long)s_countries.count];
+    stL.userInteractionEnabled = NO;
+    [s_dataPanel addSubview:stL];
+
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panData:)];
+    [s_dataPanel addGestureRecognizer:pan];
+
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (kw) [kw addSubview:s_dataPanel];
+}
+
++ (void)dataSel:(UIButton *)b {
+    int idx = (int)b.tag;
+    if (idx >= 0 && idx < 10) {
+        s_sel = idx;
+        for (UIButton *nb in s_nums) nb.selected = (nb.tag == idx);
+    }
+    [self upd];
+}
+
++ (void)dataOnOff {
+    if (s_sel < 0) s_sel = 0;
+    s_on = !s_on;
+    [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
+    s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
+    s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+    postCmd(s_on ? @"run.on" : @"run.off");
+    [self updDataUI];
+}
+
++ (void)dataLink {
+    s_linked = !s_linked;
+    s_lite = s_linked;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSMutableArray *mics = [NSMutableArray array];
+        for (UIWindow *w in [UIApplication sharedApplication].windows) {
+            if (!w || w.hidden) continue;
+            findAllMics(w, mics);
+        }
+        for (UIView *f in mics) {
+            f.hidden = s_linked;
+            for (UIView *sv in f.subviews) sv.hidden = s_linked;
+            callSel(f, @"lt_rippleButtonAction:", @(s_linked?1:0), nil);
+        }
+    });
+    postCmd(s_linked ? @"link.on" : @"link.off");
+    [self updDataUI];
+}
+
++ (void)updDataUI {
+    if (!s_dataPanel) return;
+    for (UIView *sv in s_dataPanel.subviews) {
+        if (![sv isKindOfClass:[UIButton class]]) continue;
+        UIButton *b = (UIButton *)sv;
+        NSString *t = [b titleForState:UIControlStateNormal];
+        if ([t isEqualToString:@"ON"] || [t isEqualToString:@"OFF"]) {
+            [b setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
+            b.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
+            b.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+        } else if ([t hasPrefix:@"ربط"]) {
+            [b setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
+            b.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
+            b.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
+        }
+    }
+}
+
++ (void)panData:(UIPanGestureRecognizer *)g {
+    static CGPoint sc;
+    UIView *v = g.view;
+    if (g.state == 1) sc = v.center;
+    if (g.state == 2) {
+        CGPoint t = [g translationInView:v.superview];
+        v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
+    }
+}
+
+// ==================== Passcode ====================
+
++ (void)submitPass {
     NSString *code = s_passField.text ?: @"";
     if (![code isEqualToString:@"515"]) {
-        UIColor *orig = clr(20,20,20,0.9);
+        UIColor *orig = s_passField.backgroundColor;
         s_passField.backgroundColor = clr(255,51,51,0.5);
-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 300000000), dispatch_get_main_queue(), ^{
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 0.25 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
             s_passField.backgroundColor = orig;
         });
         s_passField.text = @"";
@@ -250,24 +600,30 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [self buildUI];
 }
 
-- (void)showPass {
-    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat sh = [UIScreen mainScreen].bounds.size.height;
-    s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, sw, sh)];
++ (void)showPass {
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (!kw) return;
+    UIView *cv = kw.rootViewController.view;
+    if (!cv) return;
+
+    s_passView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, [UIScreen mainScreen].bounds.size.width, [UIScreen mainScreen].bounds.size.height)];
     s_passView.backgroundColor = [UIColor colorWithWhite:0 alpha:0.85];
     s_passView.userInteractionEnabled = YES;
+
     UIView *box = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 220, 150)];
-    box.center = CGPointMake(sw/2, sh/2 - 60);
+    box.center = CGPointMake(s_passView.center.x, s_passView.center.y - 60);
     box.backgroundColor = [UIColor blackColor];
     box.layer.cornerRadius = 16;
     box.layer.borderWidth = 2;
     box.layer.borderColor = clr(26,26,26,0.8).CGColor;
+
     UILabel *pt = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, 220, 20)];
     pt.text = @"YallaAgentMaster";
     pt.textColor = [UIColor whiteColor];
     pt.font = [UIFont boldSystemFontOfSize:15];
     pt.textAlignment = NSTextAlignmentCenter;
     [box addSubview:pt];
+
     s_passField = [[UITextField alloc] initWithFrame:CGRectMake(30, 50, 160, 34)];
     s_passField.placeholder = @"515";
     s_passField.textAlignment = NSTextAlignmentCenter;
@@ -280,63 +636,31 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     s_passField.layer.borderWidth = 1;
     s_passField.layer.borderColor = clr(50,50,50,0.8).CGColor;
     [box addSubview:s_passField];
-    UIButton *ub = [UIButton buttonWithType:UIButtonTypeCustom];
-    ub.frame = CGRectMake(30, 96, 160, 34);
-    [ub setTitle:@"Unlock" forState:UIControlStateNormal];
-    [ub setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    ub.backgroundColor = clr(20,20,80,0.9);
-    ub.layer.cornerRadius = 8;
-    ub.titleLabel.font = [UIFont boldSystemFontOfSize:14];
-    [ub addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
-    [box addSubview:ub];
+
+    UIButton *unlockBtn = [UIButton buttonWithType:UIButtonTypeCustom];
+    unlockBtn.frame = CGRectMake(30, 96, 160, 34);
+    [unlockBtn setTitle:@"Unlock" forState:UIControlStateNormal];
+    [unlockBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    unlockBtn.backgroundColor = clr(20,20,80,0.9);
+    unlockBtn.layer.cornerRadius = 8;
+    unlockBtn.titleLabel.font = [UIFont boldSystemFontOfSize:14];
+    [unlockBtn addTarget:self action:@selector(submitPass) forControlEvents:UIControlEventTouchUpInside];
+    [box addSubview:unlockBtn];
+
     [s_passView addSubview:box];
-    [s_overlay addSubview:s_passView];
+    [cv addSubview:s_passView];
     [s_passField becomeFirstResponder];
 }
 
+// ==================== Build UI ====================
 
-
-// ==================== AsT7aLh (mic coordinates from ASTEngine) ====================
-- (NSString *)AsT7aLh {
-    int idx = s_sel >= 0 ? s_sel : 0;
-    CGFloat bx = s_astBXs[idx];
-    CGFloat by = s_astBYs[idx];
-    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
-        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
-}
-
-- (NSString *)AsT7aLhForMic:(int)mic {
-    int idx = mic - 1;
-    if (idx < 0 || idx >= 10) idx = 0;
-    CGFloat bx = s_astBXs[idx] > 0 ? s_astBXs[idx] : 0;
-    CGFloat by = s_astBYs[idx] > 0 ? s_astBYs[idx] : 0;
-    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
-        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
-}
-
-- (void)saveASTCoords {
-    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
-    for (int i = 0; i < 10; i++) {
-        [ud setDouble:s_astBXs[i] forKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
-        [ud setDouble:s_astBYs[i] forKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
-    }
-    [ud setDouble:s_astPX forKey:@"AST_panelX"];
-    [ud setDouble:s_astPY forKey:@"AST_panelY"];
-    [ud synchronize];
-}
-
-- (void)loadASTCoords {
-    NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
-    for (int i = 0; i < 10; i++) {
-        s_astBXs[i] = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleX_%d", i]];
-        s_astBYs[i] = [ud doubleForKey:[NSString stringWithFormat:@"AST_bubbleY_%d", i]];
-    }
-    s_astPX = [ud doubleForKey:@"AST_panelX"];
-    s_astPY = [ud doubleForKey:@"AST_panelY"];
-}
-
-- (void)buildUI {
++ (void)buildUI {
     [self loadASTCoords];
+    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
+    if (!kw) return;
+    UIView *cv = kw.rootViewController.view;
+    if (!cv) return;
+
     CGFloat sw = [UIScreen mainScreen].bounds.size.width;
     CGFloat PW = 340;
     if (sw < PW + 16) PW = sw - 16;
@@ -370,23 +694,20 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     nl.userInteractionEnabled = NO;
     [s_panel addSubview:nl];
 
-    // Separator
-    UIView *sep1 = [[UIView alloc] initWithFrame:CGRectMake(0, 32, PW, 1)];
-    sep1.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
-    [s_panel addSubview:sep1];
+    [s_panel addSubview:mkSep(0, 32, PW)];
 
     // Numbers 1-10
     CGFloat numStartX = 12;
     CGFloat numTotalW = PW - 24;
     CGFloat numSpacing = numTotalW / 9;
     s_nums = [NSMutableArray array];
-    for (int i = 0; i < 10; i++) {
+    for (int i = 1; i <= 10; i++) {
         UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-        CGFloat bx = numStartX + i * numSpacing;
+        CGFloat bx = numStartX + (i - 1) * numSpacing;
         CGFloat bw = numSpacing - 4;
         if (bw < 22) bw = 22;
         b.frame = CGRectMake(bx, 40, bw, 28);
-        [b setTitle:[@(i+1) stringValue] forState:UIControlStateNormal];
+        [b setTitle:[@(i) stringValue] forState:UIControlStateNormal];
         [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
         [b setTitleColor:clr(0,255,68,1) forState:UIControlStateSelected];
         b.backgroundColor = [UIColor blackColor];
@@ -400,10 +721,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
         [s_nums addObject:b];
     }
 
-    // Separator
-    UIView *sep2 = [[UIView alloc] initWithFrame:CGRectMake(0, 74, PW, 1)];
-    sep2.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
-    [s_panel addSubview:sep2];
+    [s_panel addSubview:mkSep(0, 74, PW)];
 
     // Controls: ON, ms, cxx, LiTE, Hide, Data
     CGFloat cw = (PW - 24 - 5 * 4) / 6;
@@ -424,15 +742,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_panel addSubview:s_onBtn];
 
     CGFloat msX = cStartX + (cw + 4);
-    s_msL = [[UILabel alloc] initWithFrame:CGRectMake(msX, 82, cw, 30)];
-    s_msL.text = @"ms:50";
-    s_msL.textColor = [UIColor whiteColor];
-    s_msL.font = [UIFont boldSystemFontOfSize:11];
-    s_msL.textAlignment = NSTextAlignmentCenter;
+    s_msL = mkLab(msX, 82, cw, 30, @"ms:50", 11);
     s_msL.layer.borderWidth = 1.5;
     s_msL.layer.borderColor = clr(26,26,26,0.6).CGColor;
     s_msL.layer.cornerRadius = 8;
-    s_msL.clipsToBounds = YES;
     [s_panel addSubview:s_msL];
     UIButton *msBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     msBtn.frame = CGRectMake(msX, 82, cw, 30);
@@ -441,15 +754,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_panel addSubview:msBtn];
 
     CGFloat cxxX = cStartX + 2 * (cw + 4);
-    s_cxxL = [[UILabel alloc] initWithFrame:CGRectMake(cxxX, 82, cw, 30)];
-    s_cxxL.text = @"cxx";
-    s_cxxL.textColor = [UIColor whiteColor];
-    s_cxxL.font = [UIFont boldSystemFontOfSize:11];
-    s_cxxL.textAlignment = NSTextAlignmentCenter;
+    s_cxxL = mkLab(cxxX, 82, cw, 30, @"cxx", 11);
     s_cxxL.layer.borderWidth = 1.5;
     s_cxxL.layer.borderColor = clr(26,26,26,0.6).CGColor;
     s_cxxL.layer.cornerRadius = 8;
-    s_cxxL.clipsToBounds = YES;
     [s_panel addSubview:s_cxxL];
     UIButton *cxxBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     cxxBtn.frame = CGRectMake(cxxX, 82, cw, 30);
@@ -458,15 +766,10 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_panel addSubview:cxxBtn];
 
     CGFloat liteX = cStartX + 3 * (cw + 4);
-    s_liteL = [[UILabel alloc] initWithFrame:CGRectMake(liteX, 82, cw, 30)];
-    s_liteL.text = @"LiTE";
-    s_liteL.textColor = [UIColor whiteColor];
-    s_liteL.font = [UIFont boldSystemFontOfSize:11];
-    s_liteL.textAlignment = NSTextAlignmentCenter;
+    s_liteL = mkLab(liteX, 82, cw, 30, @"LiTE", 11);
     s_liteL.layer.borderWidth = 1.5;
     s_liteL.layer.borderColor = clr(26,26,26,0.6).CGColor;
     s_liteL.layer.cornerRadius = 8;
-    s_liteL.clipsToBounds = YES;
     [s_panel addSubview:s_liteL];
     UIButton *liteBtn = [UIButton buttonWithType:UIButtonTypeCustom];
     liteBtn.frame = CGRectMake(liteX, 82, cw, 30);
@@ -497,7 +800,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     dataBtn.layer.borderWidth = 1.5;
     dataBtn.layer.borderColor = clr(60,60,60,0.6).CGColor;
     dataBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [dataBtn addTarget:self action:@selector(showCountryPanel) forControlEvents:UIControlEventTouchUpInside];
+    [dataBtn addTarget:self action:@selector(dataT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:dataBtn];
 
     // Status
@@ -518,13 +821,13 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     infoL.userInteractionEnabled = NO;
     [s_panel addSubview:infoL];
 
-    // Draggable panel
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panP:)];
+    // Draggable
+    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
     [s_panel addGestureRecognizer:pan];
 
-    [s_overlay addSubview:s_panel];
+    [cv addSubview:s_panel];
 
-    // Floating circle
+    // Circle
     CGFloat cs = 48;
     CGFloat cx2 = sw - cs - 20;
     CGFloat cy2 = [UIScreen mainScreen].bounds.size.height / 2 - cs / 2;
@@ -544,24 +847,14 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     [s_circle addSubview:cl];
     UITapGestureRecognizer *ctap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(showPanel)];
     [s_circle addGestureRecognizer:ctap];
-    UIPanGestureRecognizer *cpan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panC:)];
+    UIPanGestureRecognizer *cpan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panCircle:)];
     [s_circle addGestureRecognizer:cpan];
-    [s_overlay addSubview:s_circle];
+    [cv addSubview:s_circle];
 
     [self upd];
 }
 
-- (UILabel *)mkL:(CGFloat)x y:(CGFloat)y w:(CGFloat)w h:(CGFloat)h t:(NSString *)t fs:(CGFloat)fs {
-    UILabel *lb = [[UILabel alloc] initWithFrame:CGRectMake(x, y, w, h)];
-    lb.text = t;
-    lb.textColor = [UIColor whiteColor];
-    lb.font = [UIFont boldSystemFontOfSize:fs];
-    lb.textAlignment = NSTextAlignmentCenter;
-    lb.clipsToBounds = YES;
-    return lb;
-}
-
-- (void)panP:(UIPanGestureRecognizer *)g {
++ (void)panPanel:(UIPanGestureRecognizer *)g {
     static CGPoint sc;
     UIView *v = g.view;
     if (g.state == 1) sc = v.center;
@@ -576,7 +869,7 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     }
 }
 
-- (void)panC:(UIPanGestureRecognizer *)g {
++ (void)panCircle:(UIPanGestureRecognizer *)g {
     static CGPoint sc;
     UIView *v = g.view;
     if (g.state == 1) sc = v.center;
@@ -592,565 +885,175 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
     }
 }
 
-// ==================== Slave commands ====================
-- (void)slvLite:(BOOL)on {
-    s_linked = on;
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSMutableArray *mics = [NSMutableArray array];
-        for (UIWindow *w in [UIApplication sharedApplication].windows) {
-            if (!w || w.hidden) continue;
-            [self findAllMicsInView:w addTo:mics];
-        }
-        for (UIView *f in mics) {
-            f.hidden = on;
-            for (UIView *sv in f.subviews) sv.hidden = on;
-            callSel(f, @"lt_rippleButtonAction:", @(on?1:0), nil);
-        }
-    });
-}
-
-- (void)findAllMicsInView:(UIView *)v addTo:(NSMutableArray *)mics {
-    if (!v) return;
-    NSString *cn = NSStringFromClass([v class]);
-    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) {
-        [mics addObject:v];
-    }
-    for (UIView *sv in v.subviews) [self findAllMicsInView:sv addTo:mics];
-}
-
-- (void)slvCxxF {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"d6s:result:", @(1), nil);
-        callSel(f, @"c7rs:result:", @(1), nil);
-        callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
-        callSel(f, @"cxxNoSync", nil, nil);
-        callSel(f, @"g3v:", @(1), nil);
-        callSel(f, @"q2f:", @(1), nil);
-        callSel(f, @"u8k:", @(1), nil);
-        callSel(f, @"scan:result:", @(1), nil);
-    });
-}
-
-- (void)slvCxxS {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"d6s:result:", @(1), nil);
-        callSel(f, @"c7rs:result:", @(1), nil);
-        callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
-        callSel(f, @"safeCxxNoSync", nil, nil);
-        callSel(f, @"v7l:", @(1), nil);
-    });
-}
-
-- (void)slvCxxU {
-    [self glitchOff];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"d6s:result:", @(0), nil);
-        callSel(f, @"c7rs:result:", @(0), nil);
-        callSel(f, @"c7rsInsideChatOnly:result:", @(0), nil);
-        callSel(f, @"safeCxxNoSync", nil, nil);
-        callSel(f, @"g3v:", @(0), nil);
-        callSel(f, @"q2f:", @(0), nil);
-        callSel(f, @"u8k:", @(0), nil);
-        callSel(f, @"scan:result:", @(0), nil);
-        callSel(f, @"v7l:", @(0), nil);
-    });
-}
-
-- (void)slvMic:(int)s on:(BOOL)a {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"selectMic:", @(s), nil);
-        callSel(f, @"setm6b:", @(a?1:0), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(a?1:0), nil);
-        if (a) { callSel(f, @"tapMic", nil, nil); callSel(f, @"tapOnce", nil, nil); }
-        callSel(f, @"normalizedDigits:", [NSString stringWithFormat:@"%d", s], nil);
-    });
-}
-
-- (void)slvSpd:(int)ms {
-    s_slvMsIdx = 2;
-    for (int i = 0; i < 5; i++) if (kMsVals[i] == ms) { s_slvMsIdx = i; break; }
-    if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"setSpeed:", @(ms), nil);
-        callSel(f, @"changeSpeed", nil, nil);
-        callSel(f, @"setStatus", nil, nil);
-    });
-}
-
-- (void)slvTimer:(int)ms {
-    if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
-    s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
-    if (!s_timer) return;
-    dispatch_source_set_timer(s_timer, dispatch_time(DISPATCH_TIME_NOW, ms*NSEC_PER_MSEC), ms*NSEC_PER_MSEC, 0);
-    dispatch_source_set_event_handler(s_timer, ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"timerTick", nil, nil);
-    });
-    dispatch_resume(s_timer);
-}
-
-- (void)slvRunOn {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        int mic = s_isMain ? (s_sel >= 0 ? s_sel+1 : s_instanceId+1) : s_instanceId+1;
-        callSel(f, @"selectMic:", @(mic), nil);
-        callSel(f, @"setm6b:", @(1), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
-        callSel(f, @"tapMic", nil, nil);
-        callSel(f, @"tapOnce", nil, nil);
-        callSel(f, @"isChatRoomTable:", f, nil);
-        callSel(f, @"toggleRun", nil, nil);
-    });
-}
-
-- (void)slvRunOff {
-    dispatch_async(dispatch_get_main_queue(), ^{
-        id f = findLiveMikeFace(); if (!f) return;
-        callSel(f, @"setm6b:", @(0), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
-        callSel(f, @"toggleRun", nil, nil);
-    });
-}
-
-- (void)slvCmd:(NSString *)c {
-    if ([c isEqualToString:@"lite.on"]) { s_slvLite = YES; [self slvLite:YES]; }
-    else if ([c isEqualToString:@"lite.off"]) { s_slvLite = NO; [self slvLite:NO]; }
-    else if ([c isEqualToString:@"run.on"]) { [self slvRunOn]; }
-    else if ([c isEqualToString:@"run.off"]) { [self slvRunOff]; }
-    else if ([c isEqualToString:@"cxx.face"]) { s_slvCxx = YES; s_slvSafe = NO; [self slvCxxF]; [self glitchOn]; }
-    else if ([c isEqualToString:@"cxx.safe"]) { s_slvCxx = YES; s_slvSafe = YES; [self slvCxxS]; [self glitchOn]; }
-    else if ([c hasPrefix:@"speed."]) {
-        int ms = [[c substringFromIndex:6] intValue];
-        [self slvSpd:ms]; [self slvTimer:ms];
-    } else if ([c isEqualToString:@"P.M.S"]) {
-        s_slvMsIdx = s_slvMsIdx >= 4 ? 0 : s_slvMsIdx + 1;
-        [self slvSpd:kMsVals[s_slvMsIdx]];
-        [self slvTimer:kMsVals[s_slvMsIdx]];
-    } else if ([c isEqualToString:@"cxx.off"]) {
-        s_slvCxx = NO; s_slvSafe = NO;
-        [self slvCxxU];
-    } else if ([c isEqualToString:@"link.on"]) {
-        s_linked = YES; [self slvLite:YES];
-    } else if ([c isEqualToString:@"link.off"]) {
-        s_linked = NO; [self slvLite:NO];
-    }
-}
-
-// ==================== Glitch integration (native) ====================
-static UIView *s_glitchOverlay = nil;
-static UILabel *s_glitchLabel = nil;
-static void *s_soundID = NULL;
-
-- (UIView *)findMicInstanceInView:(UIView *)v {
-    if (!v) return nil;
-    NSString *cn = NSStringFromClass([v class]);
-    if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) return v;
-    for (UIView *sv in v.subviews) {
-        UIView *found = [self findMicInstanceInView:sv];
-        if (found) return found;
-    }
-    return nil;
-}
-
-- (void)createOverlay {
-    if (s_glitchOverlay) return;
-    UIWindow *kw = findKeyWindow();
-    if (!kw) kw = s_overlay;
-    if (!kw) return;
-    CGFloat sw = kw.bounds.size.width;
-    CGFloat ow = 200, oh = 120;
-    s_glitchOverlay = [[UIView alloc] initWithFrame:CGRectMake((sw-ow)/2, 80, ow, oh)];
-    s_glitchOverlay.backgroundColor = clr(200,0,0,0.85);
-    s_glitchOverlay.layer.cornerRadius = 14;
-    s_glitchOverlay.layer.borderWidth = 2;
-    s_glitchOverlay.layer.borderColor = clr(255,200,0,0.9).CGColor;
-    s_glitchOverlay.clipsToBounds = YES;
-    s_glitchOverlay.alpha = 0;
-    s_glitchOverlay.tag = 1001;
-
-    UILabel *title = [[UILabel alloc] initWithFrame:CGRectMake(0, 18, ow, 24)];
-    title.text = @"⚠️ GLITCH";
-    title.textColor = [UIColor whiteColor];
-    title.font = [UIFont boldSystemFontOfSize:18];
-    title.textAlignment = NSTextAlignmentCenter;
-    [s_glitchOverlay addSubview:title];
-
-    s_glitchLabel = [[UILabel alloc] initWithFrame:CGRectMake(0, 48, ow, 20)];
-    s_glitchLabel.text = @"TARGET LOCKED";
-    s_glitchLabel.textColor = clr(255,200,0,1);
-    s_glitchLabel.font = [UIFont boldSystemFontOfSize:13];
-    s_glitchLabel.textAlignment = NSTextAlignmentCenter;
-    [s_glitchOverlay addSubview:s_glitchLabel];
-
-    UILabel *sub = [[UILabel alloc] initWithFrame:CGRectMake(0, 72, ow, 16)];
-    sub.text = @"cxx glitch active";
-    sub.textColor = [UIColor whiteColor];
-    sub.font = [UIFont systemFontOfSize:10];
-    sub.textAlignment = NSTextAlignmentCenter;
-    [s_glitchOverlay addSubview:sub];
-
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    [s_glitchOverlay addGestureRecognizer:pan];
-
-    [kw addSubview:s_glitchOverlay];
-    [UIView animateWithDuration:0.3 animations:^{
-        s_glitchOverlay.alpha = 1;
-        s_glitchOverlay.transform = CGAffineTransformMakeScale(1.1, 1.1);
-    } completion:^(BOOL finished) {
-        [UIView animateWithDuration:0.15 animations:^{
-            s_glitchOverlay.transform = CGAffineTransformIdentity;
-        }];
-    }];
-}
-
-- (void)handlePan:(UIPanGestureRecognizer *)g {
-    static CGPoint sc;
-    UIView *v = g.view;
-    if (g.state == 1) sc = v.center;
-    if (g.state == 2) {
-        CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
-    }
-}
-
-- (void)executeCommandsOnView:(UIView *)f {
-    if (!f) return;
-    callSel(f, @"d6s:result:", @(1), nil);
-    callSel(f, @"c7rs:result:", @(1), nil);
-    callSel(f, @"c7rsInsideChatOnly:result:", @(1), nil);
-    callSel(f, @"cxxNoSync", nil, nil);
-    callSel(f, @"g3v:", @(1), nil);
-    callSel(f, @"q2f:", @(1), nil);
-    callSel(f, @"u8k:", @(1), nil);
-    callSel(f, @"scan:result:", @(1), nil);
-}
-
-- (void)glitchOn {
-    @try {
-        [self createOverlay];
-    } @catch(NSException *e) {
-        NSLog(@"[YA] glitchOn error: %@", e.reason);
-    }
-}
-
-- (void)glitchOff {
-    @try {
-        if (s_glitchOverlay) {
-            [UIView animateWithDuration:0.2 animations:^{
-                s_glitchOverlay.alpha = 0;
-                s_glitchOverlay.transform = CGAffineTransformMakeScale(0.8, 0.8);
-            } completion:^(BOOL finished) {
-                [s_glitchOverlay removeFromSuperview];
-                s_glitchOverlay = nil;
-                s_glitchLabel = nil;
-            }];
-        }
-    } @catch(NSException *e) {
-        NSLog(@"[YA] glitchOff error: %@", e.reason);
-    }
-}
-
-// ==================== Country tool (from ASTEngine format) ====================
-- (void)loadCountries {
-    if (s_countries) return;
-    NSString *path = [[NSBundle mainBundle] pathForResource:@"nationEn" ofType:@"json"];
-    if (!path) path = [[NSBundle mainBundle] pathForResource:@"nationAr" ofType:@"json"];
-    if (!path) { s_countries = @[]; return; }
-    NSData *data = [NSData dataWithContentsOfFile:path];
-    if (!data) { s_countries = @[]; return; }
-    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-    if (!dict) { s_countries = @[]; return; }
-    s_countries = dict[@"all"];
-}
-
-- (NSString *)astFormatForMic:(int)idx {
-    CGFloat bx = s_astBXs[idx];
-    CGFloat by = s_astBYs[idx];
-    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
-        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
-}
-
-- (void)showMainPanel {
-    s_showCountryView = NO;
-    s_countryPanel.hidden = YES;
-    s_panel.hidden = NO;
-}
-
-- (void)showCountryPanel {
-    [self loadCountries];
-    s_showCountryView = YES;
-    if (s_sel < 0) s_sel = 0;
-    s_panel.hidden = YES;
-    [self buildCountryUI];
-    [self updCountryUI];
-}
-
-- (void)buildCountryUI {
-    if (s_countryPanel) { s_countryPanel.hidden = NO; return; }
-    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat PW = 340;
-    if (sw < PW + 16) PW = sw - 16;
-    CGFloat PX = (sw - PW) / 2;
-    CGFloat PY = 100;
-
-    s_countryPanel = [[UIView alloc] initWithFrame:CGRectMake(PX, PY, PW, 320)];
-    s_countryPanel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.92];
-    s_countryPanel.layer.cornerRadius = 18;
-    s_countryPanel.layer.borderWidth = 2;
-    s_countryPanel.layer.borderColor = [UIColor blackColor].CGColor;
-    s_countryPanel.clipsToBounds = YES;
-    s_countryPanel.tag = 1000;
-
-    // Title
-    UILabel *titleL = [[UILabel alloc] initWithFrame:CGRectMake(0, 8, PW, 20)];
-    titleL.text = @"AST7ALH - Countries";
-    titleL.textColor = [UIColor whiteColor];
-    titleL.font = [UIFont boldSystemFontOfSize:14];
-    titleL.textAlignment = NSTextAlignmentCenter;
-    [s_countryPanel addSubview:titleL];
-
-    // Subtitle
-    UILabel *subL = [[UILabel alloc] initWithFrame:CGRectMake(0, 26, PW, 14)];
-    subL.text = @"Mic Coordinates per Country";
-    subL.textColor = clr(150,150,150,1);
-    subL.font = [UIFont systemFontOfSize:10];
-    subL.textAlignment = NSTextAlignmentCenter;
-    [s_countryPanel addSubview:subL];
-
-    UIView *sep = [[UIView alloc] initWithFrame:CGRectMake(8, 44, PW-16, 1)];
-    sep.backgroundColor = [UIColor colorWithWhite:0.25 alpha:0.5];
-    [s_countryPanel addSubview:sep];
-
-    // Country list - scrollable
-    UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 48, PW, 190)];
-    scroll.backgroundColor = [UIColor clearColor];
-    scroll.showsVerticalScrollIndicator = YES;
-
-    CGFloat yOff = 0;
-    CGFloat rowH = 36;
-    int maxCountries = (int)MIN(s_countries.count, 10);
-    for (int i = 0; i < maxCountries; i++) {
-        NSDictionary *c = s_countries[i];
-        NSString *name = c[@"countryName"] ?: @"";
-        NSString *iso = c[@"isoCode"] ?: @"";
-        NSNumber *cc = c[@"countryCode"] ?: @(0);
-        NSString *ast = [self astFormatForMic:i];
-
-        UIView *row = [[UIView alloc] initWithFrame:CGRectMake(8, yOff, PW-16, rowH-2)];
-        row.backgroundColor = clr(15,15,15,0.6);
-        row.layer.cornerRadius = 6;
-
-        // Mic number
-        UILabel *micL = [[UILabel alloc] initWithFrame:CGRectMake(4, 0, 24, rowH-2)];
-        micL.text = [@(i+1) stringValue];
-        micL.textColor = clr(0,255,68,1);
-        micL.font = [UIFont boldSystemFontOfSize:11];
-        micL.textAlignment = NSTextAlignmentCenter;
-        [row addSubview:micL];
-
-        // ISO code
-        UILabel *isoL = [[UILabel alloc] initWithFrame:CGRectMake(30, 0, 30, rowH-2)];
-        isoL.text = iso;
-        isoL.textColor = clr(200,200,200,1);
-        isoL.font = [UIFont boldSystemFontOfSize:10];
-        isoL.textAlignment = NSTextAlignmentCenter;
-        [row addSubview:isoL];
-
-        // Country name
-        UILabel *nameL = [[UILabel alloc] initWithFrame:CGRectMake(62, 0, 100, rowH-2)];
-        nameL.text = name;
-        nameL.textColor = [UIColor whiteColor];
-        nameL.font = [UIFont systemFontOfSize:10];
-        nameL.textAlignment = NSTextAlignmentLeft;
-        [row addSubview:nameL];
-
-        // Phone code
-        UILabel *codeL = [[UILabel alloc] initWithFrame:CGRectMake(164, 0, 50, rowH-2)];
-        codeL.text = [NSString stringWithFormat:@"+%@", cc];
-        codeL.textColor = clr(100,180,255,1);
-        codeL.font = [UIFont systemFontOfSize:9];
-        codeL.textAlignment = NSTextAlignmentCenter;
-        [row addSubview:codeL];
-
-        // AST7ALH coordinate
-        UILabel *astL = [[UILabel alloc] initWithFrame:CGRectMake(210, 0, PW-220, rowH-2)];
-        astL.text = ast;
-        astL.textColor = clr(255,200,0,1);
-        astL.font = [UIFont systemFontOfSize:9];
-        astL.textAlignment = NSTextAlignmentRight;
-        [row addSubview:astL];
-
-        // Select button
-        UIButton *selBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-        selBtn.frame = CGRectMake(0, 0, PW-16, rowH-2);
-        selBtn.backgroundColor = [UIColor clearColor];
-        selBtn.tag = i;
-        [selBtn addTarget:self action:@selector(countrySel:) forControlEvents:UIControlEventTouchUpInside];
-        [row addSubview:selBtn];
-
-        [scroll addSubview:row];
-        yOff += rowH;
-    }
-
-    scroll.contentSize = CGSizeMake(PW-16, yOff + 4);
-    [s_countryPanel addSubview:scroll];
-
-    // Bottom bar: On/Off, Link, Back
-    CGFloat btnW = (PW - 32) / 3;
-    CGFloat btnY = 246;
-    CGFloat btnH = 30;
-
-    // On/Off
-    UIButton *onOffBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    onOffBtn.frame = CGRectMake(8, btnY, btnW, btnH);
-    [onOffBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    [onOffBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    onOffBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-    onOffBtn.layer.cornerRadius = 8;
-    onOffBtn.layer.borderWidth = 1.5;
-    onOffBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    onOffBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [onOffBtn addTarget:self action:@selector(countryOnOff) forControlEvents:UIControlEventTouchUpInside];
-    [s_countryPanel addSubview:onOffBtn];
-
-    // Account Linking (ربط الحسابات)
-    UIButton *linkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    linkBtn.frame = CGRectMake(8 + (btnW + 8), btnY, btnW, btnH);
-    [linkBtn setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
-    [linkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    linkBtn.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
-    linkBtn.layer.cornerRadius = 8;
-    linkBtn.layer.borderWidth = 1.5;
-    linkBtn.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
-    linkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [linkBtn addTarget:self action:@selector(countryLink) forControlEvents:UIControlEventTouchUpInside];
-    [s_countryPanel addSubview:linkBtn];
-
-    // Back to main
-    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    backBtn.frame = CGRectMake(8 + 2*(btnW + 8), btnY, btnW, btnH);
-    [backBtn setTitle:@"Back" forState:UIControlStateNormal];
-    [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    backBtn.backgroundColor = [UIColor blackColor];
-    backBtn.layer.cornerRadius = 8;
-    backBtn.layer.borderWidth = 1.5;
-    backBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    backBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [backBtn addTarget:self action:@selector(showMainPanel) forControlEvents:UIControlEventTouchUpInside];
-    [s_countryPanel addSubview:backBtn];
-
-    // Status label
-    UILabel *stL = [[UILabel alloc] initWithFrame:CGRectMake(8, 280, PW-16, 14)];
-    stL.textColor = [UIColor whiteColor];
-    stL.font = [UIFont systemFontOfSize:9];
-    stL.textAlignment = NSTextAlignmentCenter;
-    stL.text = [NSString stringWithFormat:@"%d countries | AST7ALH-10TH-XXXX-XXXX", (int)s_countries.count];
-    [s_countryPanel addSubview:stL];
-
-    // Draggable
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panP:)];
-    [s_countryPanel addGestureRecognizer:pan];
-
-    [s_overlay addSubview:s_countryPanel];
-}
-
-- (void)countrySel:(UIButton *)b {
-    int idx = (int)b.tag;
-    if (idx >= 0 && idx < 10) {
-        s_sel = idx;
-        for (int i = 0; i < (int)s_nums.count; i++) {
-            UIButton *nb = s_nums[i];
-            nb.selected = (i == idx);
-        }
-    }
-    [self upd];
-}
-
-- (void)countryOnOff {
-    s_on = !s_on;
-    int mic = s_sel >= 0 ? s_sel + 1 : 1;
-    [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-    s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    id f = findLiveMikeFace();
-    if (s_on) {
-        callSel(f, @"selectMic:", @(mic), nil);
-        callSel(f, @"setm6b:", @(1), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(1), nil);
-        callSel(f, @"tapMic", nil, nil);
-        callSel(f, @"tapOnce", nil, nil);
-        callSel(f, @"isChatRoomTable:", f, nil);
-    } else {
-        callSel(f, @"setm6b:", @(0), nil);
-        callSel(f, @"masterSetRunUIOnly:", @(0), nil);
-    }
-    postCmd(s_on ? @"run.on" : @"run.off");
-    [self updCountryUI];
-}
-
-- (void)countryLink {
-    s_linked = !s_linked;
-    s_lite = s_linked;
-    s_liteL.textColor = s_lite ? clr(50,50,255,1) : [UIColor whiteColor];
-    s_liteL.backgroundColor = s_lite ? clr(26,26,150,0.9) : [UIColor clearColor];
-    s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
-    [self slvLite:s_linked];
-    postCmd(s_linked ? @"link.on" : @"link.off");
-    [self updCountryUI];
-}
-
-- (void)updCountryUI {
-    for (UIView *sv in s_countryPanel.subviews) {
-        if ([sv isKindOfClass:[UIButton class]]) {
-            UIButton *b = (UIButton *)sv;
-            NSString *t = [b titleForState:UIControlStateNormal];
-            if ([t isEqualToString:@"ON"] || [t isEqualToString:@"OFF"]) {
-                [b setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-                b.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-                b.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-            } else if ([t hasPrefix:@"ربط"]) {
-                [b setTitle:s_linked ? @"ربط✓" : @"ربط" forState:UIControlStateNormal];
-                b.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
-                b.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
-            }
-        }
-    }
-}
-
 @end
 
-static YA *s_agent = nil;
+// ==================== Darwin handlers ====================
+
+static _YM *s_agent = nil;
 
 static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
     NSString *name = (__bridge NSString *)n;
-    if ([name hasPrefix:kNotifyPrefix]) {
-        NSString *cmd = [name substringFromIndex:kNotifyPrefix.length];
-        dispatch_async(dispatch_get_main_queue(), ^{ [s_agent slvCmd:cmd]; });
-    }
+    if (![name hasPrefix:kNotifyPrefix]) return;
+    NSString *cmd = [name substringFromIndex:kNotifyPrefix.length];
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if ([cmd isEqualToString:@"run.on"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                int mic = s_isMain ? (s_sel >= 0 ? s_sel+1 : 1) : s_instanceId+1;
+                callSel(face, @"selectMic:", @(mic), nil);
+                callSel(face, @"setm6b:", @(1), nil);
+                callSel(face, @"masterSetRunUIOnly:", @(1), nil);
+                callSel(face, @"tapMic", nil, nil);
+                callSel(face, @"tapOnce", nil, nil);
+                callSel(face, @"isChatRoomTable:", face, nil);
+                callSel(face, @"toggleRun", nil, nil);
+            });
+        } else if ([cmd isEqualToString:@"run.off"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                callSel(face, @"setm6b:", @(0), nil);
+                callSel(face, @"masterSetRunUIOnly:", @(0), nil);
+                callSel(face, @"toggleRun", nil, nil);
+            });
+        } else if ([cmd isEqualToString:@"lite.on"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSMutableArray *mics = [NSMutableArray array];
+                for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                    if (!w || w.hidden) continue;
+                    findAllMics(w, mics);
+                }
+                for (UIView *f in mics) {
+                    f.hidden = YES;
+                    for (UIView *sv in f.subviews) sv.hidden = YES;
+                    callSel(f, @"lt_rippleButtonAction:", @(1), nil);
+                }
+            });
+        } else if ([cmd isEqualToString:@"lite.off"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSMutableArray *mics = [NSMutableArray array];
+                for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                    if (!w || w.hidden) continue;
+                    findAllMics(w, mics);
+                }
+                for (UIView *f in mics) {
+                    f.hidden = NO;
+                    for (UIView *sv in f.subviews) sv.hidden = NO;
+                    callSel(f, @"lt_rippleButtonAction:", @(0), nil);
+                }
+            });
+        } else if ([cmd isEqualToString:@"cxx.face"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                callSel(face, @"d6s:result:", @(1), nil);
+                callSel(face, @"c7rs:result:", @(1), nil);
+                callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
+                callSel(face, @"cxxNoSync", nil, nil);
+                callSel(face, @"g3v:", @(1), nil);
+                callSel(face, @"q2f:", @(1), nil);
+                callSel(face, @"u8k:", @(1), nil);
+                callSel(face, @"scan:result:", @(1), nil);
+            });
+            [_YM glitchOn];
+        } else if ([cmd isEqualToString:@"cxx.safe"]) {
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                callSel(face, @"d6s:result:", @(1), nil);
+                callSel(face, @"c7rs:result:", @(1), nil);
+                callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
+                callSel(face, @"safeCxxNoSync", nil, nil);
+                callSel(face, @"v7l:", @(1), nil);
+            });
+            [_YM glitchOn];
+        } else if ([cmd hasPrefix:@"speed."]) {
+            int ms = [[cmd substringFromIndex:6] intValue];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                callSel(face, @"setSpeed:", @(ms), nil);
+                callSel(face, @"changeSpeed", nil, nil);
+                callSel(face, @"setStatus", nil, nil);
+            });
+            if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
+            s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+            if (s_timer) {
+                dispatch_source_set_timer(s_timer, dispatch_time(DISPATCH_TIME_NOW, ms*NSEC_PER_MSEC), ms*NSEC_PER_MSEC, 0);
+                dispatch_source_set_event_handler(s_timer, ^{
+                    id face = findLiveMikeFace(); if (!face) return;
+                    callSel(face, @"timerTick", nil, nil);
+                });
+                dispatch_resume(s_timer);
+            }
+        } else if ([cmd isEqualToString:@"P.M.S"]) {
+            s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
+            int ms = kMsVals[s_msIdx];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                id face = findLiveMikeFace();
+                if (!face) return;
+                callSel(face, @"setSpeed:", @(ms), nil);
+                callSel(face, @"changeSpeed", nil, nil);
+                callSel(face, @"setStatus", nil, nil);
+            });
+            if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
+            s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+            if (s_timer) {
+                dispatch_source_set_timer(s_timer, dispatch_time(DISPATCH_TIME_NOW, ms*NSEC_PER_MSEC), ms*NSEC_PER_MSEC, 0);
+                dispatch_source_set_event_handler(s_timer, ^{
+                    id face = findLiveMikeFace(); if (!face) return;
+                    callSel(face, @"timerTick", nil, nil);
+                });
+                dispatch_resume(s_timer);
+            }
+        } else if ([cmd isEqualToString:@"link.on"]) {
+            s_linked = YES;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSMutableArray *mics = [NSMutableArray array];
+                for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                    if (!w || w.hidden) continue;
+                    findAllMics(w, mics);
+                }
+                for (UIView *f in mics) {
+                    f.hidden = YES;
+                    for (UIView *sv in f.subviews) sv.hidden = YES;
+                    callSel(f, @"lt_rippleButtonAction:", @(1), nil);
+                }
+            });
+        } else if ([cmd isEqualToString:@"link.off"]) {
+            s_linked = NO;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                NSMutableArray *mics = [NSMutableArray array];
+                for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                    if (!w || w.hidden) continue;
+                    findAllMics(w, mics);
+                }
+                for (UIView *f in mics) {
+                    f.hidden = NO;
+                    for (UIView *sv in f.subviews) sv.hidden = NO;
+                    callSel(f, @"lt_rippleButtonAction:", @(0), nil);
+                }
+            });
+        }
+    });
 }
 
 static void onHeartbeat(CFNotificationCenterRef c, void *o, CFStringRef n, const void *o2, CFDictionaryRef d) {
-    NSString *name = (__bridge NSString *)n;
-    if ([name hasPrefix:kNotifyHeartbeat]) {
-        dispatch_async(dispatch_get_main_queue(), ^{
-            s_slaveCount++;
-            if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
-            if (s_cxx) s_cxxCount = s_slaveCount;
-            [s_agent upd];
-        });
-    }
+    dispatch_async(dispatch_get_main_queue(), ^{
+        s_slaveCount++;
+        if (s_slaveCount > s_totalEver) s_totalEver = s_slaveCount;
+        if (s_cxx) s_cxxCount = s_slaveCount;
+        [_YM upd];
+    });
 }
 
 static void ysHandler(NSException *e) {
     NSLog(@"[YA] %@: %@", e.name, e.reason);
 }
 
-// ==================== LTLiveMikeFace methods ====================
+// ==================== LTLiveMikeFace method hooks ====================
+
 static const char kMicsKey = 0;
 static const char kCxxKey = 0;
 static const char kRunKey = 0;
@@ -1158,7 +1061,6 @@ static const char kMicKey = 0;
 static const char kSpdKey = 0;
 static const char kProfKey = 0;
 
-// prof - returns profile identifier string (PROF-XXXX-XXXX format)
 static id _prof(id self, SEL _cmd) {
     id val = objc_getAssociatedObject(self, &kProfKey);
     if (!val) {
@@ -1168,7 +1070,6 @@ static id _prof(id self, SEL _cmd) {
     return val;
 }
 
-// tapMic - try lt_mikeButtonAction: (real app method), fallback to mikeButton property
 static void _tapMic(id self, SEL _cmd) {
     SEL s = NSSelectorFromString(@"lt_mikeButtonAction:");
     if ([self respondsToSelector:s]) {
@@ -1268,18 +1169,13 @@ static void _scanResult(id self, SEL _cmd, id arg1, id arg2) {
     objc_setAssociatedObject(self, &kMicsKey, mics, OBJC_ASSOCIATION_RETAIN);
 }
 
-static NSArray *ensureMics(id self) {
+static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
+    BOOL on = [arg1 boolValue];
     NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
     if (!mics || mics.count == 0) {
         _scanResult(self, NULL, nil, nil);
         mics = objc_getAssociatedObject(self, &kMicsKey);
     }
-    return mics ?: @[];
-}
-
-static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
-    BOOL on = [arg1 boolValue];
-    NSArray *mics = ensureMics(self);
     for (UIView *v in mics) {
         v.alpha = on ? 0.3 : 1.0;
         v.userInteractionEnabled = !on;
@@ -1289,7 +1185,11 @@ static void _d6sResult(id self, SEL _cmd, id arg1, id arg2) {
 
 static void _c7rsResult(id self, SEL _cmd, id arg1, id arg2) {
     BOOL on = [arg1 boolValue];
-    NSArray *mics = ensureMics(self);
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    if (!mics || mics.count == 0) {
+        _scanResult(self, NULL, nil, nil);
+        mics = objc_getAssociatedObject(self, &kMicsKey);
+    }
     for (UIView *v in mics) {
         v.alpha = on ? 0.2 : 1.0;
         v.userInteractionEnabled = !on;
@@ -1297,7 +1197,11 @@ static void _c7rsResult(id self, SEL _cmd, id arg1, id arg2) {
 }
 
 static void _cxxNoSync(id self, SEL _cmd) {
-    NSArray *mics = ensureMics(self);
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    if (!mics || mics.count == 0) {
+        _scanResult(self, NULL, nil, nil);
+        mics = objc_getAssociatedObject(self, &kMicsKey);
+    }
     for (UIView *v in mics) {
         v.userInteractionEnabled = NO;
         v.alpha = 0.15;
@@ -1305,14 +1209,17 @@ static void _cxxNoSync(id self, SEL _cmd) {
 }
 
 static void _safeCxxNoSync(id self, SEL _cmd) {
-    NSArray *mics = ensureMics(self);
+    NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+    if (!mics || mics.count == 0) {
+        _scanResult(self, NULL, nil, nil);
+        mics = objc_getAssociatedObject(self, &kMicsKey);
+    }
     for (UIView *v in mics) {
         v.userInteractionEnabled = NO;
         v.alpha = 0.25;
     }
 }
 
-// Two-letter property accessors - store/retrieve from associated objects
 static id _w6m(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
 static void _setW6m(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
 static id _x5n(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
@@ -1324,24 +1231,25 @@ static void _setE5t(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, 
 static id _f4u(id self, SEL _cmd) { return objc_getAssociatedObject(self, sel_getName(_cmd)); }
 static void _setF4u(id self, SEL _cmd, id val) { objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN); }
 
-static id _g3v(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(g3v:)); }
+static void _g3v(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(g3v:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _getG3v(id self, SEL _cmd) { return objc_getAssociatedObject(self, @selector(g3v:)); }
 static void _setG3v(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(g3v:), arg, OBJC_ASSOCIATION_RETAIN); }
-static id _q2f(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(q2f:)); }
+static void _q2f(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(q2f:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _getQ2f(id self, SEL _cmd) { return objc_getAssociatedObject(self, @selector(q2f:)); }
 static void _setQ2f(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(q2f:), arg, OBJC_ASSOCIATION_RETAIN); }
-static id _u8k(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(u8k:)); }
+static void _u8k(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(u8k:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _getU8k(id self, SEL _cmd) { return objc_getAssociatedObject(self, @selector(u8k:)); }
 static void _setU8k(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(u8k:), arg, OBJC_ASSOCIATION_RETAIN); }
-static id _v7l(id self, SEL _cmd, id arg) { return objc_getAssociatedObject(self, @selector(v7l:)); }
+static void _v7l(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(v7l:), arg, OBJC_ASSOCIATION_RETAIN); }
+static id _getV7l(id self, SEL _cmd) { return objc_getAssociatedObject(self, @selector(v7l:)); }
 static void _setV7l(id self, SEL _cmd, id arg) { objc_setAssociatedObject(self, @selector(v7l:), arg, OBJC_ASSOCIATION_RETAIN); }
 
 static void _setSpeed(id self, SEL _cmd, id arg) {
     objc_setAssociatedObject(self, &kSpdKey, arg, OBJC_ASSOCIATION_RETAIN);
 }
 
-static void _changeSpeed(id self, SEL _cmd) {
-}
-
-static void _setStatus(id self, SEL _cmd) {
-}
+static void _changeSpeed(id self, SEL _cmd) {}
+static void _setStatus(id self, SEL _cmd) {}
 
 static void _timerTick(id self, SEL _cmd) {
     SEL s = NSSelectorFromString(@"lt_timerTick:");
@@ -1350,18 +1258,9 @@ static void _timerTick(id self, SEL _cmd) {
     }
     id val = objc_getAssociatedObject(self, &kCxxKey);
     if ([val boolValue]) {
-        NSArray *mics = ensureMics(self);
-        for (UIView *v in mics) v.alpha = 0.15;
+        NSArray *mics = objc_getAssociatedObject(self, &kMicsKey);
+        if (mics) { for (UIView *v in mics) v.alpha = 0.15; }
     }
-}
-
-// AsT7aLh - returns formatted mic coordinates string (from ASTEngine)
-static id _AsT7aLh(id self, SEL _cmd) {
-    int idx = s_sel >= 0 ? s_sel : 0;
-    CGFloat bx = s_astBXs[idx];
-    CGFloat by = s_astBYs[idx];
-    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
-        (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
 }
 
 static id _normalizedDigits(id self, SEL _cmd, id arg) {
@@ -1385,13 +1284,13 @@ static void setupMFMethods(Class mf) {
     ADDM(f4u, _f4u, "@@:");
     ADDM(setF4u:, _setF4u, "v@:@");
 
-    ADDM(g3v:, _g3v, "@@:@");
+    ADDM(g3v:, _g3v, "v@:@");
     ADDM(setG3v:, _setG3v, "v@:@");
-    ADDM(q2f:, _q2f, "@@:@");
+    ADDM(q2f:, _q2f, "v@:@");
     ADDM(setQ2f:, _setQ2f, "v@:@");
-    ADDM(u8k:, _u8k, "@@:@");
+    ADDM(u8k:, _u8k, "v@:@");
     ADDM(setU8k:, _setU8k, "v@:@");
-    ADDM(v7l:, _v7l, "@@:@");
+    ADDM(v7l:, _v7l, "v@:@");
     ADDM(setV7l:, _setV7l, "v@:@");
 
     ADDM(prof, _prof, "@@:");
@@ -1415,29 +1314,6 @@ static void setupMFMethods(Class mf) {
     ADDM(setStatus, _setStatus, "v@:");
     ADDM(timerTick, _timerTick, "v@:");
     ADDM(normalizedDigits:, _normalizedDigits, "@@:@");
-    ADDM(AsT7aLh, _AsT7aLh, "@@:");
-}
-
-static UIWindow *findKeyWindow(void) {
-    if (@available(iOS 13.0, *)) {
-        for (UIScene *s in [UIApplication sharedApplication].connectedScenes) {
-            if (s.activationState != UISceneActivationStateForegroundActive) continue;
-            UIWindowScene *ws = (UIWindowScene *)s;
-            for (UIWindow *w in ws.windows) {
-                if (w.isKeyWindow) return w;
-            }
-            for (UIWindow *w in ws.windows) {
-                if (w.hidden || w.windowLevel > UIWindowLevelNormal) continue;
-                return w;
-            }
-            return ws.windows.firstObject;
-        }
-    }
-    if ([UIApplication sharedApplication].keyWindow) return [UIApplication sharedApplication].keyWindow;
-    for (UIWindow *w in [UIApplication sharedApplication].windows) {
-        if (w.isKeyWindow) return w;
-    }
-    return [UIApplication sharedApplication].windows.firstObject;
 }
 
 __attribute__((constructor)) static void init() {
@@ -1459,35 +1335,20 @@ __attribute__((constructor)) static void init() {
             CFNotificationSuspensionBehaviorDeliverImmediately);
         CFNotificationCenterAddObserver(
             CFNotificationCenterGetDarwinNotifyCenter(), NULL, onHeartbeat,
-            NULL, NULL,
+            (__bridge CFStringRef)kNotifyHeartbeat, NULL,
             CFNotificationSuspensionBehaviorDeliverImmediately);
 
-        setupHooks();
-
-        s_agent = [[YA alloc] init];
-
         dispatch_async(dispatch_get_main_queue(), ^{
-            s_overlay = findKeyWindow();
-            if (!s_overlay) {
-                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.5 * NSEC_PER_SEC)),
-                    dispatch_get_main_queue(), ^{
-                    s_overlay = findKeyWindow();
-                    if (s_overlay) {
-                        [s_agent buildUI];
-                    }
+            if (s_isMain) {
+                [_YM showPass];
+            } else {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
+                    CFNotificationCenterPostNotification(
+                        CFNotificationCenterGetDarwinNotifyCenter(),
+                        (__bridge CFStringRef)hb, NULL, NULL, YES);
                 });
-                return;
             }
-            [s_agent buildUI];
         });
-
-        if (!s_isMain) {
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
-                CFNotificationCenterPostNotification(
-                    CFNotificationCenterGetDarwinNotifyCenter(),
-                    (__bridge CFStringRef)hb, NULL, NULL, YES);
-            });
-        }
     }
 }
