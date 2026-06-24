@@ -172,14 +172,15 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 }
 
 - (void)onT {
-    if (s_sel < 0) return;
+    if (s_sel < 0) s_sel = 0;
     s_on = !s_on;
+    int mic = s_sel + 1;
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
     id f = findLiveMikeFace();
     if (s_on) {
-        callSel(f, @"selectMic:", @(s_sel+1), nil);
+        callSel(f, @"selectMic:", @(mic), nil);
         callSel(f, @"setm6b:", @(1), nil);
         callSel(f, @"masterSetRunUIOnly:", @(1), nil);
         callSel(f, @"tapMic", nil, nil);
@@ -637,24 +638,26 @@ static void callSel(id obj, NSString *selName, id a1, id a2) {
 - (void)slvLite:(BOOL)on {
     s_linked = on;
     dispatch_async(dispatch_get_main_queue(), ^{
-        // Merge ALL mic instances in this process
+        NSMutableArray *mics = [NSMutableArray array];
         for (UIWindow *w in [UIApplication sharedApplication].windows) {
             if (!w || w.hidden) continue;
-            [self findAndHideMicsInView:w hide:on];
+            [self findAllMicsInView:w addTo:mics];
+        }
+        for (UIView *f in mics) {
+            f.hidden = on;
+            for (UIView *sv in f.subviews) sv.hidden = on;
+            callSel(f, @"lt_rippleButtonAction:", @(on?1:0), nil);
         }
     });
 }
 
-- (void)findAndHideMicsInView:(UIView *)v hide:(BOOL)on {
+- (void)findAllMicsInView:(UIView *)v addTo:(NSMutableArray *)mics {
     if (!v) return;
     NSString *cn = NSStringFromClass([v class]);
     if ([cn containsString:@"LTLiveMikeFace"] || [cn containsString:@"LiveMikeFace"]) {
-        v.hidden = on;
-        for (UIView *sv in v.subviews) sv.hidden = on;
-        callSel(v, @"lt_rippleButtonAction:", @(on?1:0), nil);
-        return;
+        [mics addObject:v];
     }
-    for (UIView *sv in v.subviews) [self findAndHideMicsInView:sv hide:on];
+    for (UIView *sv in v.subviews) [self findAllMicsInView:sv addTo:mics];
 }
 
 - (void)slvCxxF {
@@ -924,6 +927,7 @@ static void *s_soundID = NULL;
 - (void)showCountryPanel {
     [self loadCountries];
     s_showCountryView = YES;
+    if (s_sel < 0) s_sel = 0;
     s_panel.hidden = YES;
     [self buildCountryUI];
     [self updCountryUI];
@@ -1111,14 +1115,14 @@ static void *s_soundID = NULL;
 }
 
 - (void)countryOnOff {
-    if (s_sel < 0) return;
     s_on = !s_on;
+    int mic = s_sel >= 0 ? s_sel + 1 : 1;
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
     id f = findLiveMikeFace();
     if (s_on) {
-        callSel(f, @"selectMic:", @(s_sel+1), nil);
+        callSel(f, @"selectMic:", @(mic), nil);
         callSel(f, @"setm6b:", @(1), nil);
         callSel(f, @"masterSetRunUIOnly:", @(1), nil);
         callSel(f, @"tapMic", nil, nil);
@@ -1400,14 +1404,8 @@ static id _AsT7aLh(id self, SEL _cmd) {
     int idx = s_sel >= 0 ? s_sel : 0;
     CGFloat bx = s_astBXs[idx];
     CGFloat by = s_astBYs[idx];
-    NSString *fmt = [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
+    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
         (uint16_t)((int)bx & 0xFFFF), (uint16_t)((int)by & 0xFFFF)];
-    id val = objc_getAssociatedObject(self, sel_getName(_cmd));
-    if (!val) {
-        val = fmt;
-        objc_setAssociatedObject(self, sel_getName(_cmd), val, OBJC_ASSOCIATION_RETAIN);
-    }
-    return val;
 }
 
 static id _normalizedDigits(id self, SEL _cmd, id arg) {
