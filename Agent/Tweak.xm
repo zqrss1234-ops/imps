@@ -36,6 +36,13 @@ static UILabel *s_glitchLabel = nil;
 static CGFloat s_dotX = 160, s_dotY = 300;
 static UIView *s_dot = nil;
 
+// Lite sync
+static NSString *s_instanceUUID = nil;
+static int64_t s_sendSeq = 0;
+static NSMutableDictionary *s_recvSeqs = nil;
+static dispatch_source_t s_syncTimer = NULL;
+static uint64_t s_lastSync = 0;
+
 // Country tool
 static UIView *s_dataPanel = nil;
 static NSArray *s_countries = nil;
@@ -166,6 +173,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     }
     postCmd(s_on ? @"run.on" : @"run.off");
     [self upd];
+    [_YM broadcastState];
 }
 
 + (void)msT {
@@ -174,6 +182,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     postCmd([NSString stringWithFormat:@"speed.%d", kMsVals[s_msIdx]]);
     postCmd(@"P.M.S");
     [self upd];
+    [_YM broadcastState];
 }
 
 + (void)cxxT {
@@ -189,6 +198,69 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     }
     postCmd(s_cxx ? @"cxx.face" : @"cxx.safe");
     [self upd];
+    [_YM broadcastState];
+}
+
+#pragma mark - Sync (Multi-Instance State Broadcast)
+
++ (void)startSyncTimer {
+    if (s_syncTimer) return;
+    s_syncTimer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
+    dispatch_source_set_timer(s_syncTimer, dispatch_time(DISPATCH_TIME_NOW, 2 * NSEC_PER_SEC), 2 * NSEC_PER_SEC, 0);
+    dispatch_source_set_event_handler(s_syncTimer, ^{
+        [_YM broadcastState];
+    });
+    dispatch_resume(s_syncTimer);
+}
+
++ (void)stopSyncTimer {
+    if (s_syncTimer) {
+        dispatch_source_cancel(s_syncTimer);
+        s_syncTimer = NULL;
+    }
+}
+
++ (void)broadcastState {
+    uint64_t now = dispatch_time(DISPATCH_TIME_NOW, 0) / NSEC_PER_MSEC;
+    if (now - s_lastSync < 50) return;
+    int64_t seq = __sync_add_and_fetch(&s_sendSeq, 1);
+    s_lastSync = now;
+    // Encode current state into notification name
+    NSString *name = [NSString stringWithFormat:@"%@.lite.sync.%@.%lld.%d.%d.%d.%d.%d.%.0f.%.0f",
+                      kNotifyPrefix, s_instanceUUID ?: @"", seq,
+                      s_on, s_lite, s_glitch, s_msIdx, s_sel,
+                      s_dotX, s_dotY];
+    if (name.length > 255) name = [name substringToIndex:255];
+    notify_post([name UTF8String]);
+}
+
++ (void)handleSync:(NSString *)payload {
+    // payload format: uuid.seq.on.lite.glitch.spd.sel.dotX.dotY
+    NSArray *parts = [payload componentsSeparatedByString:@"."];
+    if (parts.count < 9) return;
+    NSString *uuid = parts[0];
+    if ([uuid isEqualToString:s_instanceUUID]) return;
+    if (!s_recvSeqs) s_recvSeqs = [NSMutableDictionary dictionary];
+    int64_t seq = [parts[1] longLongValue];
+    NSNumber *lastSeq = s_recvSeqs[uuid];
+    if (lastSeq && seq <= [lastSeq longLongValue]) return;
+    s_recvSeqs[uuid] = @(seq);
+
+    s_on = [parts[2] intValue];
+    s_lite = [parts[3] intValue];
+    s_glitch = [parts[4] intValue];
+    s_msIdx = [parts[5] intValue];
+    if (s_msIdx < 0 || s_msIdx > 4) s_msIdx = 0;
+    s_sel = (int)[parts[6] integerValue];
+    s_dotX = [parts[7] floatValue];
+    s_dotY = [parts[8] floatValue];
+
+    dispatch_async(dispatch_get_main_queue(), ^{
+        [_YM upd];
+        if (s_dot) {
+            s_dot.center = CGPointMake(s_dotX, s_dotY);
+        }
+    });
 }
 
 + (void)liteT {
@@ -198,6 +270,11 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     s_liteL.layer.borderColor = s_lite ? clr(50,50,255,0.9).CGColor : [UIColor colorWithWhite:0.3 alpha:0.6].CGColor;
     if (s_lite) s_linked = YES;
     else s_linked = NO;
+    if (s_lite) {
+        [_YM startSyncTimer];
+    } else {
+        [_YM stopSyncTimer];
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
         NSMutableArray *mics = [NSMutableArray array];
         for (UIWindow *w in [UIApplication sharedApplication].windows) {
@@ -212,6 +289,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     });
     if (s_lite) {
         postCmd([NSString stringWithFormat:@"dot.%.0f.%.0f", s_dotX, s_dotY]);
+        [_YM broadcastState];
     }
     postCmd(s_lite ? @"lite.on" : @"lite.off");
     [self upd];
@@ -531,11 +609,14 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
     postCmd(s_on ? @"run.on" : @"run.off");
     [self updDataUI];
+    [_YM broadcastState];
 }
 
 + (void)dataLink {
     s_linked = !s_linked;
     s_lite = s_linked;
+    if (s_lite) [_YM startSyncTimer];
+    else [_YM stopSyncTimer];
     dispatch_async(dispatch_get_main_queue(), ^{
         NSMutableArray *mics = [NSMutableArray array];
         for (UIWindow *w in [UIApplication sharedApplication].windows) {
@@ -550,6 +631,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     });
     postCmd(s_linked ? @"link.on" : @"link.off");
     [self updDataUI];
+    [_YM broadcastState];
 }
 
 + (void)updDataUI {
@@ -855,6 +937,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
         s_dotX = v.center.x;
         s_dotY = v.center.y;
         [self saveDotCoords];
+        [_YM broadcastState];
         UIView *near = [self nearestMicViewAt:s_dotX y:s_dotY];
         if (near) s_sel = [self indexOfMicView:near];
         // Update mic info label
@@ -927,6 +1010,10 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
                     callSel(f, @"lt_rippleButtonAction:", @(0), nil);
                 }
             });
+        } else if ([cmd hasPrefix:@"lite.sync."]) {
+            // Encoded state: uuid.seq.on.lite.glitch.spd.sel.dotX.dotY
+            NSString *payload = [cmd substringFromIndex:10]; // strip "lite.sync."
+            [_YM handleSync:payload];
         } else if ([cmd isEqualToString:@"cxx.face"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
                 id face = findLiveMikeFace();
@@ -1317,6 +1404,8 @@ __attribute__((constructor)) static void init() {
 
         s_instanceId = getInstanceId();
         s_isMain = [bid isEqualToString:kYallaBundle];
+        s_instanceUUID = [[[UIDevice currentDevice] identifierForVendor] UUIDString] ?: [[NSUUID UUID] UUIDString];
+        s_recvSeqs = [NSMutableDictionary dictionary];
 
         NSSetUncaughtExceptionHandler(&ysHandler);
 
@@ -1332,6 +1421,7 @@ __attribute__((constructor)) static void init() {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (s_isMain) {
                 [_YM showPass];
+                [_YM startSyncTimer];
             } else {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
