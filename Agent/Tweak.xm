@@ -859,19 +859,8 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     infoL.userInteractionEnabled = NO;
     [s_panel addSubview:infoL];
 
-    // Status separator + mic index line
+    // Separator
     [s_panel addSubview:mkSep(8, 90, PW-16)];
-    UILabel *micInfo = [[UILabel alloc] initWithFrame:CGRectMake(8, 94, PW - 16, 16)];
-    micInfo.textColor = clr(0,255,68,1);
-    micInfo.font = [UIFont systemFontOfSize:10];
-    micInfo.textAlignment = NSTextAlignmentCenter;
-    int nearest = 0;
-    UIView *near = [self nearestMicViewAt:s_dotX y:s_dotY];
-    if (near) nearest = [self indexOfMicView:near] + 1;
-    micInfo.text = [NSString stringWithFormat:@"\uD83C\uDFCC\uFE0F Mic %d  |  (%.0f, %.0f)", nearest, s_dotX, s_dotY];
-    micInfo.userInteractionEnabled = NO;
-    micInfo.tag = 998;
-    [s_panel addSubview:micInfo];
 
     // Draggable panel
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
@@ -940,14 +929,6 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
         [_YM broadcastState];
         UIView *near = [self nearestMicViewAt:s_dotX y:s_dotY];
         if (near) s_sel = [self indexOfMicView:near];
-        // Update mic info label
-        UIView *mi = [s_panel viewWithTag:998];
-        if ([mi isKindOfClass:[UILabel class]]) {
-            int nn = 0;
-            UIView *n = [self nearestMicViewAt:s_dotX y:s_dotY];
-            if (n) nn = [self indexOfMicView:n] + 1;
-            [(UILabel *)mi setText:[NSString stringWithFormat:@"\U0001F3CC\uFE0F Mic %d  |  (%.0f, %.0f)", nn, s_dotX, s_dotY]];
-        }
         [self upd];
     }
 }
