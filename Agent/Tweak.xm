@@ -871,30 +871,31 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panPanel:)];
     [s_panel addGestureRecognizer:pan];
 
+    s_panel.hidden = YES; // hidden initially, dot is visible
     [cv addSubview:s_panel];
 
-    // Position dot - replaces numbered buttons and old 515 circle
+    // Position dot - blue circle, drag to target, tap to show panel
     CGFloat ds = 40;
     s_dot = [[UIView alloc] initWithFrame:CGRectMake(s_dotX - ds/2, s_dotY - ds/2, ds, ds)];
     s_dot.backgroundColor = [UIColor clearColor];
     s_dot.layer.cornerRadius = ds / 2;
     s_dot.layer.borderWidth = 2.5;
-    s_dot.layer.borderColor = clr(0,255,68,0.9).CGColor;
+    s_dot.layer.borderColor = clr(0,120,255,1).CGColor;
     s_dot.userInteractionEnabled = YES;
 
     // Inner crosshair
     UIView *inner = [[UIView alloc] initWithFrame:CGRectMake(ds/2 - 1, 4, 2, ds - 8)];
-    inner.backgroundColor = clr(0,255,68,0.7);
+    inner.backgroundColor = clr(0,120,255,0.7);
     inner.userInteractionEnabled = NO;
     [s_dot addSubview:inner];
     UIView *innerH = [[UIView alloc] initWithFrame:CGRectMake(4, ds/2 - 1, ds - 8, 2)];
-    innerH.backgroundColor = clr(0,255,68,0.7);
+    innerH.backgroundColor = clr(0,120,255,0.7);
     innerH.userInteractionEnabled = NO;
     [s_dot addSubview:innerH];
 
     // Center dot
     UIView *center = [[UIView alloc] initWithFrame:CGRectMake(ds/2 - 3, ds/2 - 3, 6, 6)];
-    center.backgroundColor = clr(0,255,68,1);
+    center.backgroundColor = clr(0,120,255,1);
     center.layer.cornerRadius = 3;
     center.userInteractionEnabled = NO;
     [s_dot addSubview:center];
