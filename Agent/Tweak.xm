@@ -223,7 +223,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     // Encode current state into notification name
     NSString *name = [NSString stringWithFormat:@"%@.lite.sync.%@.%lld.%d.%d.%d.%d.%d.%.0f.%.0f",
                       kNotifyPrefix, s_instanceUUID ?: @"", seq,
-                      s_on, s_lite, s_glitch, s_msIdx, s_sel,
+                      s_on, s_lite, s_cxx, s_msIdx, s_sel,
                       s_dotX, s_dotY];
     if (name.length > 255) name = [name substringToIndex:255];
     notify_post([name UTF8String]);
@@ -244,19 +244,17 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     s_on = [parts[2] intValue];
     s_lite = [parts[3] intValue];
     s_linked = s_lite;
-    s_glitch = [parts[4] intValue];
+    s_cxx = [parts[4] intValue];
     s_msIdx = [parts[5] intValue];
     if (s_msIdx < 0 || s_msIdx > 4) s_msIdx = 0;
     s_sel = (int)[parts[6] integerValue];
     s_dotX = [parts[7] floatValue];
     s_dotY = [parts[8] floatValue];
 
-    dispatch_async(dispatch_get_main_queue(), ^{
-        [_YM upd];
-        if (s_dot) {
-            s_dot.center = CGPointMake(s_dotX, s_dotY);
-        }
-    });
+    [_YM upd];
+    if (s_dot) {
+        s_dot.center = CGPointMake(s_dotX, s_dotY);
+    }
 }
 
 + (void)liteT {
@@ -468,6 +466,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
 // ==================== Build UI ====================
 
 + (void)buildUI {
+    if (s_panel) return; // already built
     [self loadDotCoords];
     UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
     if (!kw) return;
@@ -664,62 +663,53 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
     NSString *cmd = [name substringFromIndex:kNotifyPrefix.length];
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([cmd isEqualToString:@"run.on"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
-                if (!near) near = findLiveMikeFace();
-                if (!near) return;
-                int mic = [_YM indexOfMicView:near] + 1;
-                callSel(near, @"selectMic:", @(mic), nil);
-                callSel(near, @"setm6b:", @(1), nil);
-                callSel(near, @"masterSetRunUIOnly:", @(1), nil);
-                callSel(near, @"tapMic", nil, nil);
-                callSel(near, @"tapOnce", nil, nil);
-                callSel(near, @"isChatRoomTable:", near, nil);
-                callSel(near, @"toggleRun", nil, nil);
-            });
+            UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
+            if (!near) near = findLiveMikeFace();
+            if (!near) return;
+            int mic = [_YM indexOfMicView:near] + 1;
+            callSel(near, @"selectMic:", @(mic), nil);
+            callSel(near, @"setm6b:", @(1), nil);
+            callSel(near, @"masterSetRunUIOnly:", @(1), nil);
+            callSel(near, @"tapMic", nil, nil);
+            callSel(near, @"tapOnce", nil, nil);
+            callSel(near, @"isChatRoomTable:", near, nil);
+            callSel(near, @"toggleRun", nil, nil);
         } else if ([cmd isEqualToString:@"run.off"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
-                if (!near) near = findLiveMikeFace();
-                if (!near) return;
-                callSel(near, @"setm6b:", @(0), nil);
-                callSel(near, @"masterSetRunUIOnly:", @(0), nil);
-                callSel(near, @"toggleRun", nil, nil);
-            });
+            UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
+            if (!near) near = findLiveMikeFace();
+            if (!near) return;
+            callSel(near, @"setm6b:", @(0), nil);
+            callSel(near, @"masterSetRunUIOnly:", @(0), nil);
+            callSel(near, @"toggleRun", nil, nil);
         } else if ([cmd isEqualToString:@"lite.on"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSMutableArray *mics = [NSMutableArray array];
-                for (UIWindow *w in [UIApplication sharedApplication].windows) {
-                    if (!w || w.hidden) continue;
-                    findAllMics(w, mics);
-                }
-                for (UIView *f in mics) {
-                    f.hidden = YES;
-                    for (UIView *sv in f.subviews) sv.hidden = YES;
-                    callSel(f, @"lt_rippleButtonAction:", @(1), nil);
-                }
-            });
+            NSMutableArray *mics = [NSMutableArray array];
+            for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                if (!w || w.hidden) continue;
+                findAllMics(w, mics);
+            }
+            for (UIView *f in mics) {
+                f.hidden = YES;
+                for (UIView *sv in f.subviews) sv.hidden = YES;
+                callSel(f, @"lt_rippleButtonAction:", @(1), nil);
+            }
         } else if ([cmd isEqualToString:@"lite.off"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSMutableArray *mics = [NSMutableArray array];
-                for (UIWindow *w in [UIApplication sharedApplication].windows) {
-                    if (!w || w.hidden) continue;
-                    findAllMics(w, mics);
-                }
-                for (UIView *f in mics) {
-                    f.hidden = NO;
-                    for (UIView *sv in f.subviews) sv.hidden = NO;
-                    callSel(f, @"lt_rippleButtonAction:", @(0), nil);
-                }
-            });
+            NSMutableArray *mics = [NSMutableArray array];
+            for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                if (!w || w.hidden) continue;
+                findAllMics(w, mics);
+            }
+            for (UIView *f in mics) {
+                f.hidden = NO;
+                for (UIView *sv in f.subviews) sv.hidden = NO;
+                callSel(f, @"lt_rippleButtonAction:", @(0), nil);
+            }
         } else if ([cmd hasPrefix:@"lite.sync."]) {
             // Encoded state: uuid.seq.on.lite.glitch.spd.sel.dotX.dotY
             NSString *payload = [cmd substringFromIndex:10]; // strip "lite.sync."
             [_YM handleSync:payload];
         } else if ([cmd isEqualToString:@"cxx.face"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
+            id face = findLiveMikeFace();
+            if (face) {
                 callSel(face, @"d6s:result:", @(1), nil);
                 callSel(face, @"c7rs:result:", @(1), nil);
                 callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
@@ -728,28 +718,26 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
                 callSel(face, @"q2f:", @(1), nil);
                 callSel(face, @"u8k:", @(1), nil);
                 callSel(face, @"scan:result:", @(1), nil);
-            });
+            }
             [_YM glitchOn];
         } else if ([cmd isEqualToString:@"cxx.safe"]) {
-            dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
+            id face = findLiveMikeFace();
+            if (face) {
                 callSel(face, @"d6s:result:", @(1), nil);
                 callSel(face, @"c7rs:result:", @(1), nil);
                 callSel(face, @"c7rsInsideChatOnly:result:", @(1), nil);
                 callSel(face, @"safeCxxNoSync", nil, nil);
                 callSel(face, @"v7l:", @(1), nil);
-            });
+            }
             [_YM glitchOn];
         } else if ([cmd hasPrefix:@"speed."]) {
             int ms = [[cmd substringFromIndex:6] intValue];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
+            id face = findLiveMikeFace();
+            if (face) {
                 callSel(face, @"setSpeed:", @(ms), nil);
                 callSel(face, @"changeSpeed", nil, nil);
                 callSel(face, @"setStatus", nil, nil);
-            });
+            }
             if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
             s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
             if (s_timer) {
@@ -763,13 +751,12 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
         } else if ([cmd isEqualToString:@"P.M.S"]) {
             s_msIdx = s_msIdx >= 4 ? 0 : s_msIdx + 1;
             int ms = kMsVals[s_msIdx];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
+            id face = findLiveMikeFace();
+            if (face) {
                 callSel(face, @"setSpeed:", @(ms), nil);
                 callSel(face, @"changeSpeed", nil, nil);
                 callSel(face, @"setStatus", nil, nil);
-            });
+            }
             if (s_timer) { dispatch_source_cancel(s_timer); s_timer = NULL; }
             s_timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, dispatch_get_main_queue());
             if (s_timer) {
@@ -782,32 +769,28 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
             }
         } else if ([cmd isEqualToString:@"link.on"]) {
             s_linked = YES;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSMutableArray *mics = [NSMutableArray array];
-                for (UIWindow *w in [UIApplication sharedApplication].windows) {
-                    if (!w || w.hidden) continue;
-                    findAllMics(w, mics);
-                }
-                for (UIView *f in mics) {
-                    f.hidden = YES;
-                    for (UIView *sv in f.subviews) sv.hidden = YES;
-                    callSel(f, @"lt_rippleButtonAction:", @(1), nil);
-                }
-            });
+            NSMutableArray *mics = [NSMutableArray array];
+            for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                if (!w || w.hidden) continue;
+                findAllMics(w, mics);
+            }
+            for (UIView *f in mics) {
+                f.hidden = YES;
+                for (UIView *sv in f.subviews) sv.hidden = YES;
+                callSel(f, @"lt_rippleButtonAction:", @(1), nil);
+            }
         } else if ([cmd isEqualToString:@"link.off"]) {
             s_linked = NO;
-            dispatch_async(dispatch_get_main_queue(), ^{
-                NSMutableArray *mics = [NSMutableArray array];
-                for (UIWindow *w in [UIApplication sharedApplication].windows) {
-                    if (!w || w.hidden) continue;
-                    findAllMics(w, mics);
-                }
-                for (UIView *f in mics) {
-                    f.hidden = NO;
-                    for (UIView *sv in f.subviews) sv.hidden = NO;
-                    callSel(f, @"lt_rippleButtonAction:", @(0), nil);
-                }
-            });
+            NSMutableArray *mics = [NSMutableArray array];
+            for (UIWindow *w in [UIApplication sharedApplication].windows) {
+                if (!w || w.hidden) continue;
+                findAllMics(w, mics);
+            }
+            for (UIView *f in mics) {
+                f.hidden = NO;
+                for (UIView *sv in f.subviews) sv.hidden = NO;
+                callSel(f, @"lt_rippleButtonAction:", @(0), nil);
+            }
         } else if ([cmd hasPrefix:@"dot."]) {
             NSString *rest = [cmd substringFromIndex:4];
             NSArray *parts = [rest componentsSeparatedByString:@"."];
@@ -1123,6 +1106,10 @@ __attribute__((constructor)) static void init() {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (s_isMain) {
                 [_YM showPass];
+                // buildUI called from submitPass after passcode
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [_YM startSyncTimer];
+                });
             } else {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
@@ -1130,12 +1117,11 @@ __attribute__((constructor)) static void init() {
                         CFNotificationCenterGetDarwinNotifyCenter(),
                         (__bridge CFStringRef)hb, NULL, NULL, YES);
                 });
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                    [_YM buildUI];
+                    [_YM startSyncTimer];
+                });
             }
-            // Build panel and start sync on all instances
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, s_isMain ? 1 * NSEC_PER_SEC : 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
-                [_YM buildUI];
-                [_YM startSyncTimer];
-            });
         });
     }
 }
