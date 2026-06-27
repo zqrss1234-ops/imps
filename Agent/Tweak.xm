@@ -248,6 +248,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
 
     s_on = [parts[2] intValue];
     s_lite = [parts[3] intValue];
+    s_linked = s_lite;
     s_glitch = [parts[4] intValue];
     s_msIdx = [parts[5] intValue];
     if (s_msIdx < 0 || s_msIdx > 4) s_msIdx = 0;
@@ -607,6 +608,10 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
     s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
     s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
+    if (s_on) {
+        UIView *near = [self nearestMicViewAt:s_dotX y:s_dotY];
+        if (near) s_sel = [self indexOfMicView:near];
+    }
     postCmd(s_on ? @"run.on" : @"run.off");
     [self updDataUI];
     [_YM broadcastState];
@@ -946,24 +951,26 @@ static void onNotify(CFNotificationCenterRef c, void *o, CFStringRef n, const vo
     dispatch_async(dispatch_get_main_queue(), ^{
         if ([cmd isEqualToString:@"run.on"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
-                int mic = s_isMain ? (s_sel + 1) : (s_instanceId + 1);
-                callSel(face, @"selectMic:", @(mic), nil);
-                callSel(face, @"setm6b:", @(1), nil);
-                callSel(face, @"masterSetRunUIOnly:", @(1), nil);
-                callSel(face, @"tapMic", nil, nil);
-                callSel(face, @"tapOnce", nil, nil);
-                callSel(face, @"isChatRoomTable:", face, nil);
-                callSel(face, @"toggleRun", nil, nil);
+                UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
+                if (!near) near = findLiveMikeFace();
+                if (!near) return;
+                int mic = [_YM indexOfMicView:near] + 1;
+                callSel(near, @"selectMic:", @(mic), nil);
+                callSel(near, @"setm6b:", @(1), nil);
+                callSel(near, @"masterSetRunUIOnly:", @(1), nil);
+                callSel(near, @"tapMic", nil, nil);
+                callSel(near, @"tapOnce", nil, nil);
+                callSel(near, @"isChatRoomTable:", near, nil);
+                callSel(near, @"toggleRun", nil, nil);
             });
         } else if ([cmd isEqualToString:@"run.off"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
-                id face = findLiveMikeFace();
-                if (!face) return;
-                callSel(face, @"setm6b:", @(0), nil);
-                callSel(face, @"masterSetRunUIOnly:", @(0), nil);
-                callSel(face, @"toggleRun", nil, nil);
+                UIView *near = [_YM nearestMicViewAt:s_dotX y:s_dotY];
+                if (!near) near = findLiveMikeFace();
+                if (!near) return;
+                callSel(near, @"setm6b:", @(0), nil);
+                callSel(near, @"masterSetRunUIOnly:", @(0), nil);
+                callSel(near, @"toggleRun", nil, nil);
             });
         } else if ([cmd isEqualToString:@"lite.on"]) {
             dispatch_async(dispatch_get_main_queue(), ^{
@@ -1402,7 +1409,6 @@ __attribute__((constructor)) static void init() {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (s_isMain) {
                 [_YM showPass];
-                [_YM startSyncTimer];
             } else {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     NSString *hb = [NSString stringWithFormat:@"%@.%d", kNotifyHeartbeat, s_instanceId];
@@ -1411,6 +1417,11 @@ __attribute__((constructor)) static void init() {
                         (__bridge CFStringRef)hb, NULL, NULL, YES);
                 });
             }
+            // Build panel and start sync on all instances
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, s_isMain ? 1 * NSEC_PER_SEC : 5 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+                [_YM buildUI];
+                [_YM startSyncTimer];
+            });
         });
     }
 }
