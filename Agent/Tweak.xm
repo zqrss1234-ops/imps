@@ -19,7 +19,6 @@ static BOOL s_linked = NO;
 static int s_slaveCount = 0;
 static int s_totalEver = 0;
 static int s_cxxCount = 0;
-static int s_showData = 0;
 
 static UIView *s_panel = nil;
 static UIView *s_passView = nil;
@@ -42,10 +41,6 @@ static int64_t s_sendSeq = 0;
 static NSMutableDictionary *s_recvSeqs = nil;
 static dispatch_source_t s_syncTimer = NULL;
 static uint64_t s_lastSync = 0;
-
-// Country tool
-static UIView *s_dataPanel = nil;
-static NSArray *s_countries = nil;
 
 static UIColor *clr(CGFloat r, CGFloat g, CGFloat b, CGFloat a) {
     return [UIColor colorWithRed:r/255.0 green:g/255.0 blue:b/255.0 alpha:a];
@@ -297,7 +292,6 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
 }
 
 + (void)showPanel {
-    if (s_dataPanel && !s_dataPanel.hidden) return;
     s_panel.hidden = NO;
     s_dot.hidden = YES;
 }
@@ -383,24 +377,6 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     }
 }
 
-// ==================== AST7ALH / Country Data ====================
-
-+ (NSString *)astFormat {
-    return [NSString stringWithFormat:@"AST7ALH-10TH-%04X-%04X",
-        (uint16_t)((int)s_dotX & 0xFFFF), (uint16_t)((int)s_dotY & 0xFFFF)];
-}
-
-+ (void)loadCountries {
-    if (s_countries) return;
-    NSString *path = [[NSBundle mainBundle] pathForResource:@"nationEn" ofType:@"json"];
-    if (!path) path = [[NSBundle mainBundle] pathForResource:@"nationAr" ofType:@"json"];
-    if (!path) { s_countries = @[]; return; }
-    NSData *data = [NSData dataWithContentsOfFile:path];
-    if (!data) { s_countries = @[]; return; }
-    NSDictionary *dict = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
-    s_countries = dict[@"all"] ?: @[];
-}
-
 + (void)saveDotCoords {
     NSUserDefaults *ud = [NSUserDefaults standardUserDefaults];
     [ud setDouble:s_dotX forKey:@"AST_dotX"];
@@ -415,257 +391,7 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     if (vx > 0 && vy > 0) { s_dotX = vx; s_dotY = vy; }
 }
 
-+ (void)dataT {
-    [self loadCountries];
-    s_showData = 1;
-    s_panel.hidden = YES;
-    s_dot.hidden = YES;
-    [self buildDataUI];
-    [self updDataUI];
-}
 
-+ (void)backToMain {
-    s_showData = 0;
-    s_dataPanel.hidden = YES;
-    s_panel.hidden = NO;
-}
-
-+ (void)buildDataUI {
-    if (s_dataPanel) { s_dataPanel.hidden = NO; return; }
-    CGFloat sw = [UIScreen mainScreen].bounds.size.width;
-    CGFloat PW = 340;
-    if (sw < PW + 16) PW = sw - 16;
-    CGFloat PX = (sw - PW) / 2;
-    CGFloat PY = 100;
-
-    s_dataPanel = [[UIView alloc] initWithFrame:CGRectMake(PX, PY, PW, 320)];
-    s_dataPanel.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.92];
-    s_dataPanel.layer.cornerRadius = 18;
-    s_dataPanel.layer.borderWidth = 2;
-    s_dataPanel.layer.borderColor = [UIColor blackColor].CGColor;
-    s_dataPanel.clipsToBounds = YES;
-    s_dataPanel.tag = 1000;
-
-    UILabel *titleL = [[UILabel alloc] initWithFrame:CGRectMake(0, 8, PW, 20)];
-    titleL.text = @"AST7ALH - Countries";
-    titleL.textColor = [UIColor whiteColor];
-    titleL.font = [UIFont boldSystemFontOfSize:14];
-    titleL.textAlignment = NSTextAlignmentCenter;
-    titleL.userInteractionEnabled = NO;
-    [s_dataPanel addSubview:titleL];
-
-    UILabel *subL = [[UILabel alloc] initWithFrame:CGRectMake(0, 26, PW, 14)];
-    subL.text = [NSString stringWithFormat:@"%lu countries loaded", (unsigned long)s_countries.count];
-    subL.textColor = clr(150,150,150,1);
-    subL.font = [UIFont systemFontOfSize:10];
-    subL.textAlignment = NSTextAlignmentCenter;
-    subL.userInteractionEnabled = NO;
-    [s_dataPanel addSubview:subL];
-
-    [s_dataPanel addSubview:mkSep(8, 44, PW-16)];
-
-    // Scroll list
-    UIScrollView *scroll = [[UIScrollView alloc] initWithFrame:CGRectMake(0, 48, PW, 188)];
-    scroll.backgroundColor = [UIColor clearColor];
-    scroll.showsVerticalScrollIndicator = YES;
-
-    CGFloat yOff = 0;
-    CGFloat rowH = 34;
-    int maxCnt = (int)MIN(s_countries.count, 10);
-    NSString *ast = [self astFormat];
-    for (int i = 0; i < maxCnt; i++) {
-        NSDictionary *c = s_countries[i];
-        NSString *name = c[@"countryName"] ?: @"";
-        NSString *iso = c[@"isoCode"] ?: @"";
-        NSNumber *cc = c[@"countryCode"] ?: @(0);
-
-        UIView *row = [[UIView alloc] initWithFrame:CGRectMake(8, yOff, PW-16, rowH-2)];
-        row.backgroundColor = clr(15,15,15,0.6);
-        row.layer.cornerRadius = 6;
-
-        UILabel *micL = [[UILabel alloc] initWithFrame:CGRectMake(4, 0, 22, rowH-2)];
-        micL.text = [@(i+1) stringValue];
-        micL.textColor = clr(0,255,68,1);
-        micL.font = [UIFont boldSystemFontOfSize:11];
-        micL.textAlignment = NSTextAlignmentCenter;
-        micL.userInteractionEnabled = NO;
-        [row addSubview:micL];
-
-        UILabel *isoL = [[UILabel alloc] initWithFrame:CGRectMake(28, 0, 28, rowH-2)];
-        isoL.text = iso;
-        isoL.textColor = clr(200,200,200,1);
-        isoL.font = [UIFont boldSystemFontOfSize:10];
-        isoL.textAlignment = NSTextAlignmentCenter;
-        isoL.userInteractionEnabled = NO;
-        [row addSubview:isoL];
-
-        UILabel *nameL = [[UILabel alloc] initWithFrame:CGRectMake(58, 0, 90, rowH-2)];
-        nameL.text = name;
-        nameL.textColor = [UIColor whiteColor];
-        nameL.font = [UIFont systemFontOfSize:10];
-        nameL.textAlignment = NSTextAlignmentLeft;
-        nameL.userInteractionEnabled = NO;
-        [row addSubview:nameL];
-
-        UILabel *codeL = [[UILabel alloc] initWithFrame:CGRectMake(150, 0, 40, rowH-2)];
-        codeL.text = [NSString stringWithFormat:@"+%@", cc];
-        codeL.textColor = clr(100,180,255,1);
-        codeL.font = [UIFont systemFontOfSize:9];
-        codeL.textAlignment = NSTextAlignmentCenter;
-        codeL.userInteractionEnabled = NO;
-        [row addSubview:codeL];
-
-        UILabel *astL = [[UILabel alloc] initWithFrame:CGRectMake(192, 0, PW-210, rowH-2)];
-        astL.text = ast;
-        astL.textColor = clr(255,200,0,1);
-        astL.font = [UIFont systemFontOfSize:8];
-        astL.textAlignment = NSTextAlignmentRight;
-        astL.adjustsFontSizeToFitWidth = YES;
-        astL.minimumScaleFactor = 0.6;
-        astL.userInteractionEnabled = NO;
-        [row addSubview:astL];
-
-        UIButton *selBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-        selBtn.frame = CGRectMake(0, 0, PW-16, rowH-2);
-        selBtn.backgroundColor = [UIColor clearColor];
-        selBtn.tag = i;
-        [selBtn addTarget:self action:@selector(dataSel:) forControlEvents:UIControlEventTouchUpInside];
-        [row addSubview:selBtn];
-
-        [scroll addSubview:row];
-        yOff += rowH;
-    }
-    scroll.contentSize = CGSizeMake(PW-16, yOff+4);
-    [s_dataPanel addSubview:scroll];
-
-    // Bottom buttons
-    CGFloat btnW = (PW - 32) / 3;
-    CGFloat btnY = 244;
-    CGFloat btnH = 28;
-    CGFloat btnF = 10;
-
-    UIButton *onOffBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    onOffBtn.frame = CGRectMake(8, btnY, btnW, btnH);
-    [onOffBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    [onOffBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    onOffBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-    onOffBtn.layer.cornerRadius = 8;
-    onOffBtn.layer.borderWidth = 1.5;
-    onOffBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    onOffBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
-    [onOffBtn addTarget:self action:@selector(dataOnOff) forControlEvents:UIControlEventTouchUpInside];
-    [s_dataPanel addSubview:onOffBtn];
-
-    UIButton *linkBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    linkBtn.frame = CGRectMake(8 + (btnW+8), btnY, btnW, btnH);
-    [linkBtn setTitle:s_linked ? @"\u0631\u0628\u0637\u2713" : @"\u0631\u0628\u0637" forState:UIControlStateNormal];
-    [linkBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    linkBtn.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
-    linkBtn.layer.cornerRadius = 8;
-    linkBtn.layer.borderWidth = 1.5;
-    linkBtn.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
-    linkBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
-    [linkBtn addTarget:self action:@selector(dataLink) forControlEvents:UIControlEventTouchUpInside];
-    [s_dataPanel addSubview:linkBtn];
-
-    UIButton *backBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    backBtn.frame = CGRectMake(8+2*(btnW+8), btnY, btnW, btnH);
-    [backBtn setTitle:@"Back" forState:UIControlStateNormal];
-    [backBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    backBtn.backgroundColor = [UIColor blackColor];
-    backBtn.layer.cornerRadius = 8;
-    backBtn.layer.borderWidth = 1.5;
-    backBtn.layer.borderColor = clr(26,26,26,0.6).CGColor;
-    backBtn.titleLabel.font = [UIFont boldSystemFontOfSize:btnF];
-    [backBtn addTarget:self action:@selector(backToMain) forControlEvents:UIControlEventTouchUpInside];
-    [s_dataPanel addSubview:backBtn];
-
-    // Status line
-    UILabel *stL = [[UILabel alloc] initWithFrame:CGRectMake(8, 278, PW-16, 14)];
-    stL.textColor = [UIColor whiteColor];
-    stL.font = [UIFont systemFontOfSize:9];
-    stL.textAlignment = NSTextAlignmentCenter;
-    stL.text = [NSString stringWithFormat:@"%lu countries | AST7ALH-10TH-XXXX-XXXX",
-        (unsigned long)s_countries.count];
-    stL.userInteractionEnabled = NO;
-    [s_dataPanel addSubview:stL];
-
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(panData:)];
-    [s_dataPanel addGestureRecognizer:pan];
-
-    UIWindow *kw = [[UIApplication sharedApplication] keyWindow];
-    if (kw) [kw addSubview:s_dataPanel];
-}
-
-+ (void)dataSel:(UIButton *)b {
-    int idx = (int)b.tag;
-    if (idx >= 0 && idx < 10) s_sel = idx;
-    [self upd];
-}
-
-+ (void)dataOnOff {
-    s_on = !s_on;
-    [s_onBtn setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-    s_onBtn.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-    s_onBtn.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-    if (s_on) {
-        UIView *near = [self nearestMicViewAt:s_dotX y:s_dotY];
-        if (near) s_sel = [self indexOfMicView:near];
-    }
-    postCmd(s_on ? @"run.on" : @"run.off");
-    [self updDataUI];
-    [_YM broadcastState];
-}
-
-+ (void)dataLink {
-    s_linked = !s_linked;
-    s_lite = s_linked;
-    if (s_lite) [_YM startSyncTimer];
-    else [_YM stopSyncTimer];
-    dispatch_async(dispatch_get_main_queue(), ^{
-        NSMutableArray *mics = [NSMutableArray array];
-        for (UIWindow *w in [UIApplication sharedApplication].windows) {
-            if (!w || w.hidden) continue;
-            findAllMics(w, mics);
-        }
-        for (UIView *f in mics) {
-            f.hidden = s_linked;
-            for (UIView *sv in f.subviews) sv.hidden = s_linked;
-            callSel(f, @"lt_rippleButtonAction:", @(s_linked?1:0), nil);
-        }
-    });
-    postCmd(s_linked ? @"link.on" : @"link.off");
-    [self updDataUI];
-    [_YM broadcastState];
-}
-
-+ (void)updDataUI {
-    if (!s_dataPanel) return;
-    for (UIView *sv in s_dataPanel.subviews) {
-        if (![sv isKindOfClass:[UIButton class]]) continue;
-        UIButton *b = (UIButton *)sv;
-        NSString *t = [b titleForState:UIControlStateNormal];
-        if ([t isEqualToString:@"ON"] || [t isEqualToString:@"OFF"]) {
-            [b setTitle:s_on ? @"OFF" : @"ON" forState:UIControlStateNormal];
-            b.backgroundColor = s_on ? clr(100,0,0,0.9) : clr(0,100,0,0.9);
-            b.layer.borderColor = s_on ? clr(255,0,0,0.9).CGColor : clr(0,255,0,0.9).CGColor;
-        } else if ([t hasPrefix:@"\u0631\u0628\u0637"]) {
-            [b setTitle:s_linked ? @"\u0631\u0628\u0637\u2713" : @"\u0631\u0628\u0637" forState:UIControlStateNormal];
-            b.backgroundColor = s_linked ? clr(26,26,150,0.9) : clr(10,10,50,0.9);
-            b.layer.borderColor = s_linked ? clr(50,50,255,0.9).CGColor : clr(26,26,26,0.6).CGColor;
-        }
-    }
-}
-
-+ (void)panData:(UIPanGestureRecognizer *)g {
-    static CGPoint sc;
-    UIView *v = g.view;
-    if (g.state == 1) sc = v.center;
-    if (g.state == 2) {
-        CGPoint t = [g translationInView:v.superview];
-        v.center = CGPointMake(sc.x + t.x, sc.y + t.y);
-    }
-}
 
 // ==================== Passcode ====================
 
@@ -764,10 +490,10 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     s_panel.clipsToBounds = YES;
     s_panel.tag = 999;
 
-    // Controls: ON, ms, cxx, LiTE, Hide, Data
-    CGFloat cw = (PW - 24 - 5 * 4) / 6;
+    // Controls: ON, ms, cxx, LiTE, Hide
+    CGFloat cw = (PW - 24 - 4 * 4) / 5;
     if (cw > 52) cw = 52;
-    CGFloat cTotalW = cw * 6 + 5 * 4;
+    CGFloat cTotalW = cw * 5 + 4 * 4;
     CGFloat cStartX = (PW - cTotalW) / 2;
 
     s_onBtn = [UIButton buttonWithType:UIButtonTypeCustom];
@@ -830,19 +556,6 @@ static void callSel(id obj, NSString *selName, id arg1, id arg2) {
     hideBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
     [hideBtn addTarget:self action:@selector(hideT) forControlEvents:UIControlEventTouchUpInside];
     [s_panel addSubview:hideBtn];
-
-    CGFloat dataX = cStartX + 5 * (cw + 4);
-    UIButton *dataBtn = [UIButton buttonWithType:UIButtonTypeCustom];
-    dataBtn.frame = CGRectMake(dataX, 10, cw, 32);
-    [dataBtn setTitle:@"Data" forState:UIControlStateNormal];
-    [dataBtn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    dataBtn.backgroundColor = clr(40,40,40,0.9);
-    dataBtn.layer.cornerRadius = 8;
-    dataBtn.layer.borderWidth = 1.5;
-    dataBtn.layer.borderColor = clr(60,60,60,0.6).CGColor;
-    dataBtn.titleLabel.font = [UIFont boldSystemFontOfSize:11];
-    [dataBtn addTarget:self action:@selector(dataT) forControlEvents:UIControlEventTouchUpInside];
-    [s_panel addSubview:dataBtn];
 
     [s_panel addSubview:mkSep(8, 48, PW-16)];
 
